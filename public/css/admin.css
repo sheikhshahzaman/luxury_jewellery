@@ -1,0 +1,118 @@
+/* ============================================================
+   Eluxee Admin — layout for the management panel.
+   Loads after eluxee.css + shop.css and reuses their tokens.
+   ============================================================ */
+
+body.admin{background:var(--ivory);display:flex;min-height:100vh}
+
+/* ---------- Sidebar ---------- */
+.adm-sidebar{width:248px;flex:none;background:var(--forest);color:#B9C4BB;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+.adm-brand{font-family:var(--display);font-size:20px;letter-spacing:.3em;text-transform:uppercase;color:var(--ivory);padding:26px 24px 22px;border-bottom:1px solid var(--line-dark);display:block}
+.adm-brand span{color:var(--champagne);font-size:11px;letter-spacing:.24em;display:block;margin-top:6px;font-family:var(--body)}
+.adm-nav{padding:18px 0 30px;flex:1}
+.adm-nav .group{font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:#7A8A7E;padding:20px 24px 8px}
+.adm-nav a{display:flex;align-items:center;gap:12px;padding:11px 24px;font-size:13.5px;letter-spacing:.05em;color:#B9C4BB;border-left:3px solid transparent;transition:all .2s}
+.adm-nav a:hover{color:var(--ivory);background:rgba(255,255,255,.04)}
+.adm-nav a.on{color:var(--ivory);border-left-color:var(--champagne);background:rgba(195,165,114,.1)}
+.adm-nav a svg{flex:none;opacity:.8}
+.adm-nav .pill{margin-left:auto;background:var(--champagne);color:var(--forest);font-size:10.5px;font-weight:500;border-radius:999px;padding:2px 9px;letter-spacing:.04em}
+
+/* ---------- Main column ---------- */
+.adm-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.adm-topbar{display:flex;align-items:center;justify-content:space-between;gap:18px;background:rgba(243,239,231,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:0 32px;height:64px;position:sticky;top:0;z-index:40}
+.adm-topbar h1{font-family:var(--display);font-size:20px;font-weight:400}
+.adm-topbar .right{display:flex;align-items:center;gap:20px;font-size:13px}
+.adm-topbar .right a{letter-spacing:.1em}
+.adm-topbar .right a:hover{color:var(--champagne)}
+.adm-user{display:flex;align-items:center;gap:10px;color:var(--moss)}
+.adm-user .avatar{width:32px;height:32px;border-radius:50%;background:var(--champagne);color:var(--forest);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500}
+.adm-content{padding:30px 32px 60px;max-width:1240px;width:100%}
+
+/* ---------- Cards & stats ---------- */
+.adm-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:26px}
+.adm-card{background:var(--porcelain);border:1px solid var(--line);border-radius:16px;padding:22px 24px}
+.adm-card .label{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--moss)}
+.adm-card .value{font-family:var(--display);font-size:30px;margin-top:8px}
+.adm-card .sub{font-size:12px;color:var(--moss);margin-top:4px}
+.adm-card.accent{background:var(--forest);border-color:var(--forest);color:var(--ivory)}
+.adm-card.accent .label{color:var(--champagne-soft)}
+.adm-card.accent .sub{color:#8A978D}
+.adm-card.warn{border-color:var(--champagne)}
+
+.adm-panel{background:var(--porcelain);border:1px solid var(--line);border-radius:16px;padding:26px;margin-bottom:26px}
+.adm-panel > h2{font-family:var(--display);font-size:18px;font-weight:400;margin-bottom:18px;display:flex;justify-content:space-between;align-items:baseline;gap:14px}
+.adm-panel > h2 a{font-size:12px;letter-spacing:.16em;text-transform:uppercase;border-bottom:1px solid var(--forest);font-family:var(--body)}
+.adm-panel > h2 a:hover{color:var(--champagne);border-color:var(--champagne)}
+.adm-2col{display:grid;grid-template-columns:1.4fr 1fr;gap:26px;align-items:start}
+.adm-3col{display:grid;grid-template-columns:repeat(3,1fr);gap:26px;align-items:start}
+
+/* ---------- Toolbar / filters ---------- */
+.adm-toolbar{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:22px;flex-wrap:wrap}
+.adm-toolbar form{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.adm-toolbar input[type=search],.adm-toolbar input[type=text],.adm-toolbar select{background:var(--porcelain);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-family:var(--body);font-size:13.5px;color:var(--forest);outline:none}
+.adm-toolbar input:focus,.adm-toolbar select:focus{border-color:var(--champagne)}
+.btn-sm{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;border:1px solid var(--forest);background:var(--forest);color:var(--ivory);cursor:pointer;border-radius:10px;transition:all .25s;white-space:nowrap}
+.btn-sm:hover{background:var(--champagne);border-color:var(--champagne);color:var(--forest)}
+.btn-sm.ghost{background:transparent;color:var(--forest)}
+.btn-sm.ghost:hover{background:var(--forest);color:var(--ivory)}
+.btn-sm.danger{background:transparent;border-color:#C99;color:#7A3B3B}
+.btn-sm.danger:hover{background:#7A3B3B;border-color:#7A3B3B;color:#fff}
+.btn-sm.success{background:transparent;border-color:#7FA382;color:#3B7A4A}
+.btn-sm.success:hover{background:#3B7A4A;border-color:#3B7A4A;color:#fff}
+
+/* ---------- Tables ---------- */
+.adm-table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:16px;background:var(--porcelain)}
+table.adm-table{width:100%;border-collapse:collapse;font-size:13.5px;min-width:640px}
+.adm-table th{font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--moss);font-weight:400;text-align:left;padding:14px 18px;border-bottom:1px solid var(--line);white-space:nowrap}
+.adm-table td{padding:13px 18px;border-bottom:1px solid var(--line);vertical-align:middle}
+.adm-table tr:last-child td{border-bottom:none}
+.adm-table tr:hover td{background:rgba(195,165,114,.05)}
+.adm-table .thumb{width:44px;height:44px;object-fit:cover;border-radius:10px;border:1px solid var(--line);display:block}
+.adm-table .num{font-family:var(--display)}
+.adm-table .muted{color:var(--moss);font-size:12.5px}
+.adm-table .actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.adm-table a.row-link{border-bottom:1px solid var(--line-dark)}
+.adm-table a.row-link:hover{color:var(--champagne);border-color:var(--champagne)}
+
+/* ---------- Forms ---------- */
+.adm-form{max-width:860px}
+.adm-form .form-grid{gap:0 22px}
+.switch-row{display:flex;align-items:center;gap:12px;padding:12px 0;font-size:14px}
+.switch-row input{width:17px;height:17px;accent-color:var(--champagne)}
+.img-preview{width:110px;height:110px;object-fit:cover;border-radius:12px;border:1px solid var(--line);display:block;margin-bottom:10px}
+.gallery-row{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0 18px}
+.gallery-row .g-item{position:relative}
+.gallery-row img{width:86px;height:86px;object-fit:cover;border-radius:12px;border:1px solid var(--line);display:block}
+.gallery-row form{position:absolute;top:-8px;right:-8px}
+.gallery-row button{width:24px;height:24px;border-radius:50%;background:#7A3B3B;color:#fff;border:none;font-size:13px;line-height:1;cursor:pointer}
+
+/* ---------- Dashboard chart ---------- */
+.chart-bars{display:flex;align-items:flex-end;gap:14px;height:170px;padding-top:10px}
+.chart-bars .bar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:8px;height:100%}
+.chart-bars .fill{width:100%;max-width:54px;background:linear-gradient(180deg,var(--champagne),var(--champagne-soft));border-radius:8px 8px 3px 3px;min-height:3px}
+.chart-bars .m-label{font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--moss)}
+.chart-bars .m-val{font-size:11px;color:var(--forest);font-family:var(--display)}
+
+/* ---------- Screenshot viewer ---------- */
+.shot-box{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}
+.shot-box img{width:100%;display:block}
+
+/* ---------- Empty state ---------- */
+.adm-empty{padding:56px 20px;text-align:center;color:var(--moss);font-size:14px}
+.adm-empty .gem{color:var(--champagne);display:block;font-size:22px;margin-bottom:10px}
+
+/* ---------- Responsive ---------- */
+@media (max-width:1100px){
+  .adm-cards{grid-template-columns:repeat(2,1fr)}
+  .adm-2col,.adm-3col{grid-template-columns:1fr}
+}
+@media (max-width:820px){
+  body.admin{flex-direction:column}
+  .adm-sidebar{width:100%;height:auto;position:static;flex-direction:row;flex-wrap:wrap;align-items:center}
+  .adm-brand{border-bottom:none;padding:18px 20px}
+  .adm-nav{display:flex;flex-wrap:wrap;padding:0 12px 14px}
+  .adm-nav .group{display:none}
+  .adm-nav a{border-left:none;border-radius:8px;padding:9px 13px}
+  .adm-content{padding:22px 18px 50px}
+  .adm-topbar{padding:0 18px}
+}
