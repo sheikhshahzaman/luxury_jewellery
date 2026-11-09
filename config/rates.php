@@ -37,6 +37,13 @@ return [
         'USDPKR' => [50, 2000],
     ],
 
+    // Display shuffle (on/off, rupee range and speed are set in Admin → Live rates):
+    // spot prices move only after the decimal point, by this many cents.
+    'shuffle_cents' => [
+        'gold' => [5, 45],
+        'silver' => [1, 5],
+    ],
+
     'grams_per_troy_ounce' => 31.1035,
     'grams_per_tola' => 11.6638,
 ];

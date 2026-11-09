@@ -48,7 +48,12 @@ class RateController extends Controller
             'rows.*.sort_order' => ['nullable', 'integer', 'min:0'],
             'rows.*.is_active' => ['nullable', 'boolean'],
             'rates_note' => ['nullable', 'string', 'max:300'],
+            'rates_shuffle' => ['nullable', 'boolean'],
+            'rates_shuffle_pkr_min' => ['required', 'integer', 'min:0', 'max:1000'],
+            'rates_shuffle_pkr_max' => ['required', 'integer', 'gte:rates_shuffle_pkr_min', 'max:1000'],
+            'rates_shuffle_seconds' => ['required', 'integer', 'min:2', 'max:60'],
         ], [
+            'rates_shuffle_pkr_max.gte' => 'The largest move must be at least the smallest move.',
             'rows.*.label.required' => 'Every row needs a size, e.g. "1 Tola".',
             'rows.*.key.regex' => 'Keys use lowercase letters, numbers and underscores only, e.g. silver_10_tola_qr.',
         ]);
@@ -123,6 +128,10 @@ class RateController extends Controller
         });
 
         Setting::set('rates_note', (string) ($data['rates_note'] ?? ''));
+        Setting::set('rates_shuffle', $request->boolean('rates_shuffle') ? '1' : '0');
+        foreach (['rates_shuffle_pkr_min', 'rates_shuffle_pkr_max', 'rates_shuffle_seconds'] as $key) {
+            Setting::set($key, (string) $data[$key]);
+        }
         LiveRates::forget();
 
         return back()->with('success', $changed

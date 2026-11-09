@@ -62,7 +62,9 @@ class LiveRatesTest extends TestCase
             'metal' => $r->metal, 'label' => $r->label, 'note' => $r->note, 'unit' => $r->unit,
             'quantity' => (float) $r->quantity, 'buy' => (float) $r->buy, 'sell' => (float) $r->sell,
             'sort_order' => $r->sort_order, 'is_active' => 1,
-        ], $overrides[$r->key] ?? [])])->all()];
+        ], $overrides[$r->key] ?? [])])->all(),
+            'rates_shuffle' => '1', 'rates_shuffle_pkr_min' => '10', 'rates_shuffle_pkr_max' => '20', 'rates_shuffle_seconds' => '3',
+        ];
     }
 
     public function test_rates_page_shows_spot_prices_and_both_boards(): void
@@ -247,6 +249,33 @@ class LiveRatesTest extends TestCase
         $this->assertSame(1, app(SpotRates::class)->prune());
         $this->assertSame(1, SpotRate::for('XAU')->count());
         $this->assertSame(1, SpotRate::for('XAG')->count()); // the only XAG reading stays
+    }
+
+    public function test_endpoint_serves_exact_values_and_the_display_shuffle_settings(): void
+    {
+        $json = $this->getJson('/rates/live')->json();
+
+        // Exact stored prices — the shuffle happens only in the browser.
+        $this->assertEquals(438993, collect($json['prices'])->firstWhere('key', 'gold_1_tola')['buy']);
+        $this->assertSame(['shuffle' => true, 'seconds' => 3, 'pkr' => [10, 20], 'cents' => ['gold' => [5, 45], 'silver' => [1, 5]]], $json['display']);
+    }
+
+    public function test_admin_controls_the_display_shuffle(): void
+    {
+        $this->actingAs($this->admin());
+
+        $form = $this->pricesForm();
+        $this->post('/admin/rates', ['rates_shuffle' => '0', 'rates_shuffle_pkr_min' => '15', 'rates_shuffle_pkr_max' => '40', 'rates_shuffle_seconds' => '5'] + $form)
+            ->assertSessionHas('success');
+        Setting::flushCache();
+        $this->assertSame(['shuffle' => false, 'seconds' => 5, 'pkr' => [15, 40]], array_intersect_key(app(\App\Services\LiveRates::class)->display(), array_flip(['shuffle', 'seconds', 'pkr'])));
+        // Prices themselves were not touched by saving these settings.
+        $this->assertSame(0, MetalRateChange::count());
+
+        $this->post('/admin/rates', ['rates_shuffle_pkr_min' => '30', 'rates_shuffle_pkr_max' => '10'] + $form)
+            ->assertSessionHasErrors('rates_shuffle_pkr_max');
+        $this->post('/admin/rates', ['rates_shuffle_seconds' => '1'] + $form)
+            ->assertSessionHasErrors('rates_shuffle_seconds');
     }
 
     public function test_announcement_bar_shows_one_tola_ticker(): void

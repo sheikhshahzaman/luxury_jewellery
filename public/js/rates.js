@@ -146,7 +146,7 @@
   document.addEventListener('lux:rates', ({ detail: data }) => {
     const spot = data.spot || {};
     stamp(spot.updated_at);
-    runRing((data.poll_seconds || 30) * 1000);
+    runRing(((data.display && data.display.shuffle ? data.display.seconds : data.poll_seconds) || 30) * 1000);
 
     ['gold', 'silver'].forEach(metal => {
       const s = spot[metal];

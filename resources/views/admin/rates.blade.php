@@ -136,6 +136,29 @@
     @endforeach
 
     <div class="adm-panel">
+        <h2>Movement on the website</h2>
+        <label class="mode-opt" style="margin-bottom:14px">
+            <input type="hidden" name="rates_shuffle" value="0">
+            <input type="checkbox" name="rates_shuffle" value="1" @checked(old('rates_shuffle', setting('rates_shuffle', '1')) == '1')>
+            <span><b>Shuffle the numbers on screen</b> Rupee prices move a little above or below your saved prices, and spot prices move after the decimal point, so the board feels live. Your saved prices, the spot data and the API are never changed.</span>
+        </label>
+        <div class="form-grid">
+            <div class="field">
+                <label for="rates_shuffle_pkr_min">Smallest rupee move (Rs)</label>
+                <input id="rates_shuffle_pkr_min" type="number" min="0" max="1000" name="rates_shuffle_pkr_min" value="{{ old('rates_shuffle_pkr_min', setting('rates_shuffle_pkr_min', '10')) }}" required>
+            </div>
+            <div class="field">
+                <label for="rates_shuffle_pkr_max">Largest rupee move (Rs)</label>
+                <input id="rates_shuffle_pkr_max" type="number" min="0" max="1000" name="rates_shuffle_pkr_max" value="{{ old('rates_shuffle_pkr_max', setting('rates_shuffle_pkr_max', '20')) }}" required>
+            </div>
+            <div class="field">
+                <label for="rates_shuffle_seconds">Change every (seconds)</label>
+                <input id="rates_shuffle_seconds" type="number" min="2" max="60" name="rates_shuffle_seconds" value="{{ old('rates_shuffle_seconds', setting('rates_shuffle_seconds', '3')) }}" required>
+            </div>
+        </div>
+    </div>
+
+    <div class="adm-panel">
         <div class="field full">
             <label for="rates_note">Note under the rates</label>
             <textarea id="rates_note" name="rates_note" style="min-height:60px">{{ old('rates_note', setting('rates_note', 'Rates are indicative and move with the market. Your final price is confirmed when you place your order.')) }}</textarea>

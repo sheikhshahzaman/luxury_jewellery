@@ -13,7 +13,8 @@ use Illuminate\Support\Facades\Cache;
  *    entered by hand in Admin), with per-gram / per-tola rupee conversions;
  *  - prices: the store's own buy/sell prices, set only in Admin (MetalRate).
  *
- * The numbers are the current database values; nothing is simulated.
+ * The numbers are the current database values. Browsers may shuffle them
+ * slightly on screen (see display()); the values served here never change.
  */
 class LiveRates
 {
@@ -101,6 +102,24 @@ class LiveRates
             ],
             'prices' => $this->prices()->values()->all(),
             'poll_seconds' => (int) config('rates.poll_seconds', 30),
+            'display' => $this->display(),
+        ];
+    }
+
+    /**
+     * How browsers animate the numbers between real updates. The values above
+     * are always the exact stored ones; the shuffle is applied on screen only,
+     * as a small offset from them (never cumulative), so it can't drift.
+     */
+    public function display(): array
+    {
+        $min = max(0, (int) setting('rates_shuffle_pkr_min', 10));
+
+        return [
+            'shuffle' => setting('rates_shuffle', '1') === '1',
+            'seconds' => max(2, (int) setting('rates_shuffle_seconds', 3)),
+            'pkr' => [$min, max($min, (int) setting('rates_shuffle_pkr_max', 20))],
+            'cents' => config('rates.shuffle_cents'),
         ];
     }
 }

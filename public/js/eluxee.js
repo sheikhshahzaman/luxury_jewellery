@@ -255,10 +255,90 @@ if (swUrl && 'serviceWorker' in navigator) {
 // Live rates: one shared request, every poll_seconds on the rates page and
 // half as often elsewhere (for the announcement-bar ticker). The server only
 // returns stored values: spot from the scheduled fetch, prices from Admin.
+//
+// Between requests the numbers on screen shuffle a little so the board feels
+// live (Admin can turn this off). Every shuffled value is the real value plus
+// a small offset worked out fresh each tick, never added to the last shown
+// number, so it cannot drift; a new real value re-centres it at once.
+//   - rupee prices: Rs min–max above or below; buy and sell move together,
+//     so the spread stays exact;
+//   - spot (USD): only the cents move; the whole dollars never change.
+// Offsets come from a hash of (item, time tick), so every visitor sees the
+// same numbers at the same moment.
+const fnv = text => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+};
+const pick = (seed, [lo, hi]) => lo + (fnv(seed) % (hi - lo + 1));
+const sign = seed => (fnv(seed) % 2 ? 1 : -1);
+
+/** The real snapshot as shown at time tick `tick` (pure; real data is not modified). */
+function shuffleRates(real, tick) {
+  const d = real.display || {};
+  if (!d.shuffle) return real;
+  const pkr = d.pkr || [10, 20];
+  // Every item of a metal moves the same way in a tick, as the market does.
+  const rupees = (key, metal, t) => sign(`dir:${metal}:${t}`) * pick(`pkr:${key}:${t}`, pkr);
+
+  const prices = (real.prices || []).map(row => {
+    const now = rupees(row.key, row.metal, tick);
+    return { ...row, buy: row.buy + now, sell: row.sell + now, change: now - rupees(row.key, row.metal, tick - 1) };
+  });
+
+  const spot = { ...(real.spot || {}) };
+  ['gold', 'silver'].forEach(metal => {
+    const s = spot[metal];
+    if (!s || !s.price) return;
+    const cents = (d.cents && d.cents[metal]) || [1, 5];
+    const offset = sign(`spot-dir:${metal}:${tick}`) * pick(`spot:${metal}:${tick}`, cents) / 100;
+    const whole = Math.floor(s.price);
+    // Stay within the same whole dollar: if +offset would cross it, go the other way.
+    let price = Math.round((s.price + offset) * 100) / 100;
+    if (Math.floor(price) !== whole) price = Math.round((s.price - offset) * 100) / 100;
+    if (Math.floor(price) !== whole) price = s.price;
+    const moved = price - s.price;
+    const base = s.price - s.change; // the price ~24h ago, unchanged
+    const tola = s.pkr_per_tola == null ? null : s.pkr_per_tola + rupees(`spot-tola-${metal}`, `spot-${metal}`, tick);
+    const gram = s.pkr_per_gram == null ? null : s.pkr_per_gram + rupees(`spot-gram-${metal}`, `spot-${metal}`, tick);
+    spot[metal] = {
+      ...s,
+      price,
+      bid_usd_oz: Math.round((s.bid_usd_oz + moved) * 100) / 100,
+      ask_usd_oz: Math.round((s.ask_usd_oz + moved) * 100) / 100,
+      change: Math.round((s.change + moved) * 100) / 100,
+      change_pct: base > 0 ? ((s.change + moved) / base) * 100 : 0,
+      pkr_per_tola: tola,
+      pkr_per_gram: gram,
+      history: (s.history || []).length ? [...s.history.slice(0, -1), price] : s.history,
+    };
+  });
+
+  return { ...real, prices, spot };
+}
+window.laxRates = { shuffle: shuffleRates };
+
 const ratesSource = document.querySelector('[data-rates]') || document.querySelector('[data-rate-ticker]');
 if (ratesSource) {
   const endpoint = ratesSource.dataset.endpoint;
   const factor = document.querySelector('[data-rates]') ? 1 : 2;
+  const show = data => document.dispatchEvent(new CustomEvent('lux:rates', { detail: data }));
+  let real = null;
+  let lastTick = null;
+
+  // Shuffle tick: re-draw whenever the time tick changes.
+  const tickNow = () => (real && real.display ? Math.floor(Date.now() / (real.display.seconds * 1000)) : null);
+  setInterval(() => {
+    if (!real || document.hidden || !(real.display && real.display.shuffle)) return;
+    const tick = tickNow();
+    if (tick === lastTick) return;
+    lastTick = tick;
+    show(shuffleRates(real, tick));
+  }, 400);
+
   let timer = null;
   const schedule = ms => { clearTimeout(timer); timer = setTimeout(poll, Math.max(5000, ms)); };
   function poll() {
@@ -266,13 +346,15 @@ if (ratesSource) {
     fetch(endpoint, { headers: { Accept: 'application/json' }, cache: 'no-store' })
       .then(r => r.json())
       .then(data => {
-        document.dispatchEvent(new CustomEvent('lux:rates', { detail: data }));
+        real = data;
+        lastTick = tickNow();
+        show(data.display && data.display.shuffle ? shuffleRates(data, lastTick) : data);
         schedule((data.poll_seconds || 30) * 1000 * factor);
       })
       .catch(() => schedule(60000));
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
-  schedule(parseInt(ratesSource.dataset.nextIn || '30000', 10) * factor);
+  poll(); // real values straight away, so the shuffle can start
 
   // Announcement-bar ticker
   document.addEventListener('lux:rates', ({ detail }) => {
