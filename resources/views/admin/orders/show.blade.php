@@ -29,6 +29,9 @@
                                     @else
                                         {{ $item->product_name }} <span class="muted">(deleted)</span>
                                     @endif
+                                    @if ($item->option_lines)
+                                        <div class="opt-lines">@foreach ($item->option_lines as $opt)<span>{{ $opt }}</span>@endforeach</div>
+                                    @endif
                                 </td>
                                 <td class="num">{{ price_format($item->price) }}</td>
                                 <td>{{ $item->quantity }}</td>
@@ -43,6 +46,9 @@
                         @if ($order->tax > 0)
                             <tr><td colspan="4" class="muted">Tax</td><td class="num" style="text-align:right">{{ price_format($order->tax) }}</td></tr>
                         @endif
+                        @if ($order->payment_fee > 0)
+                            <tr><td colspan="4" class="muted">Cash on delivery fee</td><td class="num" style="text-align:right">{{ price_format($order->payment_fee) }}</td></tr>
+                        @endif
                         <tr><td colspan="4"><b style="font-weight:500">Total</b></td><td class="num" style="text-align:right"><b style="font-weight:500">{{ price_format($order->total) }}</b></td></tr>
                     </tbody>
                 </table>
@@ -55,13 +61,16 @@
             <div class="adm-2col" style="gap:20px">
                 <div>
                     <dl class="pd-meta" style="margin-top:0;border-top:none">
-                        <div><dt>Method</dt><dd>Bank transfer</dd></div>
+                        <div><dt>Method</dt><dd>{{ $order->payment_method_label }}</dd></div>
                         @if ($order->bankAccount)
-                            <div><dt>Paid to</dt><dd>{{ $order->bankAccount->bank_name }} · {{ $order->bankAccount->account_number }}</dd></div>
+                            <div><dt>Paid to</dt><dd>{{ $order->bankAccount->display_name }} · {{ $order->bankAccount->account_number }}<br><span class="muted">{{ $order->bankAccount->account_name }}</span></dd></div>
                         @endif
-                        <div><dt>Amount due</dt><dd><b style="font-weight:500">{{ price_format($order->total) }}</b></dd></div>
+                        <div><dt>{{ $order->isCod() ? 'Collect on delivery' : 'Amount due' }}</dt><dd><b style="font-weight:500">{{ price_format($order->total) }}</b></dd></div>
+                        @if ($order->payer_name)
+                            <div><dt>Sent by</dt><dd>{{ $order->payer_name }}</dd></div>
+                        @endif
                         @if ($order->payment_reference)
-                            <div><dt>Customer reference</dt><dd>{{ $order->payment_reference }}</dd></div>
+                            <div><dt>Transaction ID</dt><dd>{{ $order->payment_reference }}</dd></div>
                         @endif
                         @if ($order->payment_verified_at)
                             <div><dt>Verified at</dt><dd>{{ $order->payment_verified_at->format('M j, Y H:i') }}</dd></div>
@@ -72,7 +81,19 @@
                         <div class="reject-note">Rejection reason sent to customer: {{ $order->payment_note }}</div>
                     @endif
 
-                    @if ($order->payment_status !== 'verified')
+                    @if ($order->status === 'cancelled')
+                        <p class="muted" style="font-size:13px">This order is cancelled. Reactivate it (set status to pending) to handle payment.</p>
+                    @elseif ($order->isCod())
+                        @if ($order->payment_status !== 'verified')
+                            <p class="muted" style="font-size:13px;margin-top:12px">Cash is collected by the courier. It is marked collected automatically when the order is delivered, or you can mark it now.</p>
+                            <form method="POST" action="{{ route('admin.orders.verify', $order) }}" style="margin:12px 0 0">
+                                @csrf
+                                <button type="submit" class="btn-sm success" onclick="return confirm('Mark the cash as collected?')">✓ Mark cash collected</button>
+                            </form>
+                        @else
+                            <p class="muted" style="font-size:13px">Cash collected.</p>
+                        @endif
+                    @elseif ($order->payment_status !== 'verified')
                         <form method="POST" action="{{ route('admin.orders.verify', $order) }}" style="margin:16px 0 14px">
                             @csrf
                             <button type="submit" class="btn-sm success" onclick="return confirm('Confirm this payment as received?')">✓ Verify payment</button>
@@ -91,7 +112,9 @@
                 </div>
                 <div>
                     <label style="font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--moss);display:block;margin-bottom:10px">Customer screenshot</label>
-                    @if ($order->payment_screenshot)
+                    @if ($order->isCod())
+                        <div class="adm-empty" style="padding:30px"><span class="gem">✦</span>Cash on delivery — no receipt.</div>
+                    @elseif ($order->payment_screenshot)
                         <a class="shot-box" href="{{ route('orders.screenshot', $order) }}" target="_blank" title="Open full size">
                             <img src="{{ route('orders.screenshot', $order) }}" alt="Payment screenshot">
                         </a>
@@ -112,8 +135,11 @@
                 <div class="field">
                     <label for="status">Status</label>
                     <select id="status" name="status">
-                        @foreach (\App\Models\Order::STATUSES as $status)
-                            <option value="{{ $status }}" @selected($order->status === $status)>{{ ucfirst($status) }}</option>
+                        @foreach ($order->nextStatuses() as $status)
+                            @php $blocked = $order->transitionError($status); @endphp
+                            <option value="{{ $status }}" @selected(old('status', $order->status) === $status) @disabled($blocked)>
+                                {{ ucfirst($status) }}{{ $status === $order->status ? ' (current)' : '' }}{{ $blocked ? ' — verify payment first' : '' }}
+                            </option>
                         @endforeach
                     </select>
                 </div>
@@ -127,7 +153,7 @@
                 </div>
                 <button type="submit" class="btn-sm">Update order</button>
             </form>
-            <p class="muted" style="font-size:12px;margin-top:12px">Cancelling restores stock automatically.</p>
+            <p class="muted" style="font-size:12px;margin-top:12px">Only the next allowed steps are listed. Cancelling restores stock and the coupon use; delivered orders are final.</p>
         </div>
 
         {{-- Customer --}}

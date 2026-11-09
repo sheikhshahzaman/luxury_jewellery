@@ -16,7 +16,7 @@
                     </span>
                     <div class="cat-meta">
                         <h3>{{ $category->name }}</h3>
-                        <span>{{ $category->count }} {{ Str::plural('piece', $category->count) }}</span>
+                        <span>{{ $category->count > 0 ? $category->count.' '.Str::plural('piece', $category->count) : 'Coming soon' }}</span>
                     </div>
                 </a>
             @endforeach

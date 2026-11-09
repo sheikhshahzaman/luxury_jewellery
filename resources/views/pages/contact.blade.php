@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Contact — '.setting('store_name', 'Eluxee'))
+@section('title', 'Contact — '.setting('store_name', 'Lax Jewellers'))
 
 @section('content')
 <div class="page-strip">

@@ -10,12 +10,29 @@ class Order extends Model
 {
     public const STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
 
-    public const PAYMENT_STATUSES = ['submitted', 'verified', 'rejected'];
+    /** "unpaid" is used for cash on delivery until the cash is collected. */
+    public const PAYMENT_STATUSES = ['submitted', 'verified', 'rejected', 'unpaid'];
+
+    public const PAYMENT_METHODS = [
+        'bank' => 'Bank transfer',
+        'jazzcash' => 'JazzCash',
+        'easypaisa' => 'Easypaisa',
+        'cod' => 'Cash on delivery',
+    ];
+
+    /** Which status an order may move to from each status. */
+    public const TRANSITIONS = [
+        'pending' => ['processing', 'cancelled'],
+        'processing' => ['pending', 'shipped', 'cancelled'],
+        'shipped' => ['processing', 'delivered', 'cancelled'],
+        'delivered' => [],
+        'cancelled' => ['pending'],
+    ];
 
     protected $fillable = [
-        'order_number', 'user_id', 'status', 'payment_status', 'bank_account_id',
-        'payment_screenshot', 'payment_reference', 'payment_note', 'payment_verified_at',
-        'subtotal', 'discount', 'coupon_code', 'shipping_fee', 'tax', 'total',
+        'order_number', 'user_id', 'status', 'payment_status', 'payment_method', 'bank_account_id',
+        'payment_screenshot', 'payment_reference', 'payer_name', 'payment_note', 'payment_verified_at',
+        'subtotal', 'discount', 'coupon_code', 'shipping_fee', 'tax', 'payment_fee', 'total',
         'ship_name', 'ship_phone', 'ship_address', 'ship_city', 'ship_state',
         'ship_postal', 'ship_country', 'order_note', 'tracking_number', 'admin_note',
         'shipped_at', 'delivered_at', 'cancelled_at',
@@ -26,6 +43,7 @@ class Order extends Model
         'discount' => 'decimal:2',
         'shipping_fee' => 'decimal:2',
         'tax' => 'decimal:2',
+        'payment_fee' => 'decimal:2',
         'total' => 'decimal:2',
         'payment_verified_at' => 'datetime',
         'shipped_at' => 'datetime',
@@ -38,7 +56,7 @@ class Order extends Model
         static::creating(function (Order $order) {
             if (! $order->order_number) {
                 do {
-                    $number = 'ELX-'.now()->format('ymd').'-'.strtoupper(\Illuminate\Support\Str::random(5));
+                    $number = 'LAX-'.now()->format('ymd').'-'.strtoupper(\Illuminate\Support\Str::random(5));
                 } while (static::where('order_number', $number)->exists());
 
                 $order->order_number = $number;
@@ -68,7 +86,45 @@ class Order extends Model
 
     public function canResubmitPayment(): bool
     {
-        return $this->payment_status === 'rejected' && $this->status !== 'cancelled';
+        return ! $this->isCod() && $this->payment_status === 'rejected' && $this->status !== 'cancelled';
+    }
+
+    public function isCod(): bool
+    {
+        return $this->payment_method === 'cod';
+    }
+
+    /** Payment can be verified (or COD marked collected) while the order is live. */
+    public function canVerifyPayment(): bool
+    {
+        return $this->status !== 'cancelled' && $this->payment_status !== 'verified';
+    }
+
+    /** Statuses the admin may pick from the current one (current status first). */
+    public function nextStatuses(): array
+    {
+        return array_merge([$this->status], self::TRANSITIONS[$this->status] ?? []);
+    }
+
+    /**
+     * Why this order can't move to $status, or null when it can.
+     */
+    public function transitionError(string $status): ?string
+    {
+        if ($status === $this->status) {
+            return null;
+        }
+
+        if (! in_array($status, self::TRANSITIONS[$this->status] ?? [], true)) {
+            return 'A '.$this->status.' order cannot be moved to '.$status.'.';
+        }
+
+        $needsPayment = in_array($status, ['processing', 'shipped', 'delivered'], true);
+        if ($needsPayment && ! $this->isCod() && $this->payment_status !== 'verified') {
+            return 'Verify the payment before moving this order to '.$status.'.';
+        }
+
+        return null;
     }
 
     /** Restore stock for every item (used on cancellation). */
@@ -90,9 +146,15 @@ class Order extends Model
     {
         return match ($this->payment_status) {
             'submitted' => 'Awaiting verification',
-            'verified' => 'Payment verified',
+            'verified' => $this->isCod() ? 'Cash collected' : 'Payment verified',
             'rejected' => 'Payment rejected',
-            default => ucfirst($this->payment_status),
+            'unpaid' => 'Pay on delivery',
+            default => ucfirst((string) $this->payment_status),
         };
+    }
+
+    public function getPaymentMethodLabelAttribute(): string
+    {
+        return self::PAYMENT_METHODS[$this->payment_method] ?? ucfirst((string) $this->payment_method);
     }
 }

@@ -32,7 +32,7 @@
                     <td>
                         <div class="actions">
                             <a href="{{ route('admin.coupons.edit', $coupon) }}" class="btn-sm ghost">Edit</a>
-                            <form method="POST" action="{{ route('admin.coupons.destroy', $coupon) }}" onsubmit="return confirm('Delete coupon {{ $coupon->code }}?')">
+                            <form method="POST" action="{{ route('admin.coupons.destroy', $coupon) }}" onsubmit="return confirm({{ Js::from('Delete coupon '.$coupon->code.'?') }})">
                                 @csrf @method('DELETE')
                                 <button type="submit" class="btn-sm danger">Delete</button>
                             </form>

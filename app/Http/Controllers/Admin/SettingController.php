@@ -14,7 +14,7 @@ class SettingController extends Controller
 {
     /**
      * Editable settings, grouped for the form.
-     * type: text | textarea | number | image
+     * type: text | textarea | number | image | toggle
      */
     public const GROUPS = [
         'Brand & store' => [
@@ -29,6 +29,13 @@ class SettingController extends Controller
             'free_shipping_min' => ['label' => 'Free shipping above (0 to disable)', 'type' => 'number'],
             'tax_rate' => ['label' => 'Tax rate % (0 to disable)', 'type' => 'number'],
         ],
+        'Search engines' => [
+            'hide_from_search' => ['label' => 'Hide the store from Google and other search engines (noindex, nofollow) — untick when you launch', 'type' => 'toggle', 'default' => '1'],
+        ],
+        'Payments' => [
+            'cod_enabled' => ['label' => 'Offer cash on delivery at checkout', 'type' => 'toggle', 'default' => '1'],
+            'cod_fee' => ['label' => 'Cash on delivery fee (0 for none)', 'type' => 'number'],
+        ],
         'Contact & map' => [
             'contact_email' => ['label' => 'Contact email', 'type' => 'text'],
             'contact_phone' => ['label' => 'Contact phone', 'type' => 'text'],
@@ -39,23 +46,29 @@ class SettingController extends Controller
             'instagram_handle' => ['label' => 'Instagram handle', 'type' => 'text'],
             'instagram_url' => ['label' => 'Instagram URL', 'type' => 'text'],
         ],
-        'Homepage — hero' => [
-            'hero_eyebrow' => ['label' => 'Hero eyebrow', 'type' => 'text'],
-            'hero_title' => ['label' => 'Hero title (HTML <em> allowed)', 'type' => 'text'],
-            'hero_text' => ['label' => 'Hero paragraph', 'type' => 'textarea'],
-            'hero_image' => ['label' => 'Hero image', 'type' => 'image'],
-            'stat_1_num' => ['label' => 'Stat 1 number', 'type' => 'text'],
-            'stat_1_label' => ['label' => 'Stat 1 label', 'type' => 'text'],
-            'stat_2_num' => ['label' => 'Stat 2 number', 'type' => 'text'],
-            'stat_2_label' => ['label' => 'Stat 2 label', 'type' => 'text'],
-            'stat_3_num' => ['label' => 'Stat 3 number', 'type' => 'text'],
-            'stat_3_label' => ['label' => 'Stat 3 label', 'type' => 'text'],
+        'Homepage — opening (hero)' => [
+            'hero_eyebrow' => ['label' => 'Small line above the headline', 'type' => 'text'],
+            'hero_title' => ['label' => 'Headline (HTML <em> allowed)', 'type' => 'text'],
+            'hero_text' => ['label' => 'Intro paragraph', 'type' => 'textarea'],
+            'hero_image' => ['label' => 'Opening image (only used if the scroll film’s frames are missing)', 'type' => 'image'],
         ],
         'Homepage — section headings' => [
             'categories_title' => ['label' => 'Categories section title', 'type' => 'text'],
             'bestsellers_eyebrow' => ['label' => 'Best sellers eyebrow', 'type' => 'text'],
             'bestsellers_title' => ['label' => 'Best sellers section title', 'type' => 'text'],
             'testimonials_title' => ['label' => 'Testimonials section title', 'type' => 'text'],
+        ],
+        'Homepage — opening story (why buy from us)' => [
+            'story_1_title' => ['label' => 'Chapter 1 title (made your way)', 'type' => 'text'],
+            'story_1_text' => ['label' => 'Chapter 1 text', 'type' => 'textarea'],
+            'story_2_title' => ['label' => 'Chapter 2 title (gold rate)', 'type' => 'text'],
+            'story_2_text' => ['label' => 'Chapter 2 text', 'type' => 'textarea'],
+            'story_3_title' => ['label' => 'Chapter 3 title (payment)', 'type' => 'text'],
+            'story_3_text' => ['label' => 'Chapter 3 text', 'type' => 'textarea'],
+            'story_4_title' => ['label' => 'Chapter 4 title (delivery)', 'type' => 'text'],
+            'story_4_text' => ['label' => 'Chapter 4 text', 'type' => 'textarea'],
+            'story_5_title' => ['label' => 'Chapter 5 title (your metal)', 'type' => 'text'],
+            'story_5_text' => ['label' => 'Chapter 5 text', 'type' => 'textarea'],
         ],
         'Homepage — banner & marquee' => [
             'banner_eyebrow' => ['label' => 'Banner eyebrow', 'type' => 'text'],
@@ -104,16 +117,45 @@ class SettingController extends Controller
 
     public function update(Request $request): RedirectResponse
     {
+        // Validate every field up front so a bad value saves nothing.
+        $rules = [];
         foreach (self::GROUPS as $fields) {
             foreach ($fields as $key => $meta) {
-                if (($meta['type'] ?? 'text') === 'image') {
+                $rules += match ($meta['type'] ?? 'text') {
+                    'number' => [$key => ['nullable', 'numeric', 'min:0', 'max:1000000']],
+                    'toggle' => [$key => ['nullable', 'boolean']],
+                    'image' => [
+                        $key => ['nullable', 'string', 'max:1000'],
+                        $key.'_file' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+                    ],
+                    default => [$key => ['nullable', 'string', 'max:5000']],
+                };
+            }
+        }
+        $rules['tax_rate'][] = 'max:100';
+        $request->validate($rules, [], ['*_file' => 'image']);
+
+        foreach (self::GROUPS as $fields) {
+            foreach ($fields as $key => $meta) {
+                $type = $meta['type'] ?? 'text';
+
+                if ($type === 'image') {
                     $this->saveImage($request, $key);
+                } elseif ($type === 'toggle') {
+                    // The form sends a hidden "0" before the checkbox.
+                    if ($request->has($key)) {
+                        Setting::set($key, $request->boolean($key) ? '1' : '0');
+                    }
+                } elseif ($request->has($key)) {
+                    $value = (string) $request->input($key);
 
-                    continue;
-                }
+                    // The hero title is rendered as HTML; only <em> is allowed.
+                    if ($key === 'hero_title') {
+                        $value = strip_tags($value, '<em>');
+                        $value = preg_replace('/<em\b[^>]*>/i', '<em>', $value);
+                    }
 
-                if ($request->has($key)) {
-                    Setting::set($key, (string) $request->input($key));
+                    Setting::set($key, $value);
                 }
             }
         }
@@ -131,12 +173,9 @@ class SettingController extends Controller
             return;
         }
 
-        // Upload a file (takes priority over a URL).
+        // Upload a file (takes priority over a URL). Already validated above;
+        // SVG is not accepted because it can carry scripts.
         if ($request->hasFile($key.'_file')) {
-            $request->validate([
-                $key.'_file' => ['file', 'mimes:jpg,jpeg,png,webp,svg', 'max:4096'],
-            ], [], [$key.'_file' => 'image']);
-
             $this->deleteExisting($key);
             Setting::set($key, $request->file($key.'_file')->store('branding', 'public'));
 

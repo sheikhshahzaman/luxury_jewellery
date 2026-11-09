@@ -1,7 +1,16 @@
 @extends('layouts.app')
 
-@section('title', $product->name.' — '.setting('store_name', 'Eluxee'))
+@section('title', $product->name.' — '.setting('store_name', 'Lax Jewellers'))
 @section('meta_description', Str::limit(strip_tags((string) $product->description), 150))
+
+@if (jewellery_model($product->category))
+    @push('preload')
+        {{-- Fetch the 3D viewer quietly in the background so "View in 3D" opens instantly. --}}
+        @foreach (vite_chunks('resources/js/three/product-viewer.js') as $url)
+            <link rel="prefetch" href="{{ $url }}" as="script">
+        @endforeach
+    @endpush
+@endif
 
 @section('content')
 <div class="container pd">
@@ -15,8 +24,25 @@
     </div>
 
     <div class="pd-grid">
+        @php $model3d = jewellery_model($product->category); @endphp
         <div class="pd-gallery reveal in">
-            <div class="pd-main"><img src="{{ $product->gallery[0] }}" alt="{{ $product->name }}"></div>
+            <div class="pd-main">
+                <img src="{{ $product->gallery[0] }}" alt="{{ $product->name }}">
+                @if ($model3d)
+                    {{-- Illustrative 3D model (resources/js/three/product-viewer.js); follows the metal picker. --}}
+                    <div class="pd-3d" data-product-viewer data-model="{{ $model3d }}" data-tone="{{ metal_tone($product->metals()[0]['name'] ?? 'gold') }}" data-lenis-prevent
+                         role="img" aria-label="Illustrative 3D model — drag to turn, scroll to zoom"></div>
+                @endif
+            </div>
+            @if ($model3d)
+                <div class="pd-3d-bar">
+                    <button type="button" class="viewer-toggle" data-viewer-toggle aria-pressed="false" hidden>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/></svg>
+                        <span data-label>View in 3D</span>
+                    </button>
+                    <span class="pd-3d-note">Illustrative model showing the metal colours — the photos show the actual piece.</span>
+                </div>
+            @endif
             @if (count($product->gallery) > 1)
                 <div class="pd-thumbs">
                     @foreach ($product->gallery as $i => $src)
@@ -36,7 +62,7 @@
             <div class="stars">{{ str_repeat('★', (int) round($product->rating_avg)) }}{{ str_repeat('☆', 5 - (int) round($product->rating_avg)) }}<small>({{ $product->reviews_count }} {{ Str::plural('review', $product->reviews_count) }})</small></div>
 
             <div class="pd-price-row">
-                <span class="pd-price">{{ price_format($product->current_price) }}</span>
+                <span class="pd-price" id="pdPrice" data-symbol="{{ setting('currency_symbol', '$') }}">{{ price_format($product->current_price) }}</span>
                 @if ($product->has_discount)
                     <span class="pd-price-old">{{ price_format($product->price) }}</span>
                     <span class="pd-save">Save {{ $product->discount_percent }}%</span>
@@ -56,8 +82,12 @@
             @endif
 
             @if ($product->in_stock)
-                <form class="pd-form" method="POST" action="{{ route('cart.add', $product) }}">
+                <form class="pd-buy" method="POST" action="{{ route('cart.add', $product) }}" id="buyForm">
                     @csrf
+                    @if ($product->hasOptions())
+                        @include('shop.partials.options')
+                    @endif
+                    <div class="pd-form">
                     <div class="qty-box">
                         <button type="button" data-step="-1" aria-label="Decrease quantity">−</button>
                         <input type="number" name="qty" value="1" min="1" max="{{ $product->stock }}" aria-label="Quantity">
@@ -69,6 +99,7 @@
                     <button type="submit" form="wishForm" class="wish-btn @if(auth()->check() && auth()->user()->hasInWishlist($product)) on @endif" aria-label="Toggle wishlist">
                         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20s-7-4.5-9-9c-1.2-2.8.6-6 3.7-6C8.8 5 10.5 6.4 12 8c1.5-1.6 3.2-3 5.3-3 3.1 0 4.9 3.2 3.7 6-2 4.5-9 9-9 9Z"/></svg>
                     </button>
+                    </div>
                 </form>
             @else
                 <div class="pd-form">
@@ -87,7 +118,7 @@
                 @if ($product->category)
                     <div><dt>Category</dt><dd>{{ $product->category->name }}</dd></div>
                 @endif
-                <div><dt>Payment</dt><dd>Direct bank transfer</dd></div>
+                <div><dt>Payment</dt><dd>{{ payment_methods_summary() }}</dd></div>
                 <div><dt>Shipping</dt><dd>@if((float) setting('free_shipping_min', 150) > 0) Free over {{ price_format(setting('free_shipping_min', 150)) }} @else {{ price_format(setting('shipping_fee', 15)) }} flat @endif</dd></div>
             </dl>
         </div>

@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', $order->order_number.' — '.setting('store_name', 'Eluxee'))
+@section('title', $order->order_number.' — '.setting('store_name', 'Lax Jewellers'))
 
 @section('content')
 <div class="container account-wrap">
@@ -31,12 +31,18 @@
                 </div>
             @endif
 
-            @if ($order->payment_status === 'rejected')
+            @if ($order->status === 'cancelled')
+                <div class="reject-note">This order was cancelled{{ $order->cancelled_at ? ' on '.$order->cancelled_at->format('M j, Y') : '' }}.</div>
+            @elseif ($order->payment_status === 'rejected')
                 <div class="reject-note">
                     <b style="font-weight:500">Your payment could not be verified.</b>
                     @if ($order->payment_note) Reason: {{ $order->payment_note }}@endif
-                    <br>Please upload a new screenshot below.
+                    <br>Please upload a new receipt below.
                 </div>
+            @elseif ($order->payment_status === 'submitted')
+                <div class="pay-note" style="margin:0 0 22px">✦ We received your receipt and are verifying the payment. Your order moves to <b>processing</b> as soon as it is confirmed.</div>
+            @elseif ($order->payment_status === 'unpaid' && $order->status !== 'delivered')
+                <div class="pay-note" style="margin:0 0 22px">✦ Cash on delivery — please keep <b>{{ price_format($order->total) }}</b> ready for the courier.</div>
             @endif
 
             <div class="order-cols">
@@ -55,6 +61,9 @@
                                                 {{ $item->product_name }}
                                             @endif
                                         </div>
+                                        @if ($item->option_lines)
+                                            <div class="opt-lines">@foreach ($item->option_lines as $opt)<span>{{ $opt }}</span>@endforeach</div>
+                                        @endif
                                         <div class="ci-qty">Qty {{ $item->quantity }} · {{ price_format($item->price) }} each</div>
                                     </div>
                                     <span class="ci-price">{{ price_format($item->line_total) }}</span>
@@ -69,12 +78,15 @@
                         @if ($order->tax > 0)
                             <div class="sum-row"><span>Tax</span><b>{{ price_format($order->tax) }}</b></div>
                         @endif
+                        @if ($order->payment_fee > 0)
+                            <div class="sum-row"><span>Cash on delivery fee</span><b>{{ price_format($order->payment_fee) }}</b></div>
+                        @endif
                         <div class="sum-row total"><span>Total</span><span>{{ price_format($order->total) }}</span></div>
                     </div>
 
                     @if ($order->canResubmitPayment())
                         <div class="panel">
-                            <h3>Resubmit payment proof</h3>
+                            <h3>Resubmit payment receipt</h3>
                             <form method="POST" action="{{ route('account.orders.payment', $order) }}" enctype="multipart/form-data">
                                 @csrf
                                 <div class="upload-box" id="uploadBox">
@@ -85,11 +97,19 @@
                                     <input type="file" name="payment_screenshot" accept="image/jpeg,image/png,image/webp">
                                 </div>
                                 @error('payment_screenshot')<span class="field-error" style="display:block;margin-top:10px">{{ $message }}</span>@enderror
-                                <div class="field" style="margin-top:18px">
-                                    <label for="payment_reference">Transaction reference (optional)</label>
-                                    <input id="payment_reference" type="text" name="payment_reference" value="{{ old('payment_reference', $order->payment_reference) }}">
+                                <div class="form-grid" style="margin-top:18px">
+                                    <div class="field">
+                                        <label for="payment_reference">Transaction ID</label>
+                                        <input id="payment_reference" type="text" name="payment_reference" value="{{ old('payment_reference', $order->payment_reference) }}" required>
+                                        @error('payment_reference')<span class="field-error">{{ $message }}</span>@enderror
+                                    </div>
+                                    <div class="field">
+                                        <label for="payer_name">Sent from (account holder name)</label>
+                                        <input id="payer_name" type="text" name="payer_name" value="{{ old('payer_name', $order->payer_name) }}" required>
+                                        @error('payer_name')<span class="field-error">{{ $message }}</span>@enderror
+                                    </div>
                                 </div>
-                                <button type="submit" class="btn btn-solid">Submit new screenshot</button>
+                                <button type="submit" class="btn btn-solid">Submit new receipt</button>
                             </form>
                         </div>
                     @endif
@@ -99,20 +119,24 @@
                     <div class="panel">
                         <h3>Payment</h3>
                         <dl class="pd-meta" style="margin-top:0">
-                            <div><dt>Method</dt><dd>Bank transfer</dd></div>
+                            <div><dt>Method</dt><dd>{{ $order->payment_method_label }}</dd></div>
+                            <div><dt>Status</dt><dd>{{ $order->payment_status_label }}</dd></div>
                             @if ($order->bankAccount)
-                                <div><dt>Bank</dt><dd>{{ $order->bankAccount->bank_name }}</dd></div>
-                                <div><dt>Account</dt><dd>{{ $order->bankAccount->account_number }}</dd></div>
+                                <div><dt>Paid to</dt><dd>{{ $order->bankAccount->display_name }}</dd></div>
+                                <div><dt>{{ $order->bankAccount->isWallet() ? 'Number' : 'Account' }}</dt><dd>{{ $order->bankAccount->account_number }}</dd></div>
+                            @endif
+                            @if ($order->payer_name)
+                                <div><dt>Sent by</dt><dd>{{ $order->payer_name }}</dd></div>
                             @endif
                             @if ($order->payment_reference)
-                                <div><dt>Reference</dt><dd>{{ $order->payment_reference }}</dd></div>
+                                <div><dt>Transaction ID</dt><dd>{{ $order->payment_reference }}</dd></div>
                             @endif
                             @if ($order->payment_verified_at)
                                 <div><dt>Verified</dt><dd>{{ $order->payment_verified_at->format('M j, Y H:i') }}</dd></div>
                             @endif
                         </dl>
                         @if ($order->payment_screenshot)
-                            <p style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--moss);margin:16px 0 10px">Your screenshot</p>
+                            <p style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--moss);margin:16px 0 10px">Your receipt</p>
                             <a href="{{ route('orders.screenshot', $order) }}" target="_blank">
                                 <img class="screenshot-thumb" src="{{ route('orders.screenshot', $order) }}" alt="Payment screenshot">
                             </a>

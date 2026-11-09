@@ -25,7 +25,7 @@
                     <td>
                         <div class="actions">
                             <a href="{{ route('admin.categories.edit', $category) }}" class="btn-sm ghost">Edit</a>
-                            <form method="POST" action="{{ route('admin.categories.destroy', $category) }}" onsubmit="return confirm('Delete “{{ $category->name }}”?')">
+                            <form method="POST" action="{{ route('admin.categories.destroy', $category) }}" onsubmit="return confirm({{ Js::from('Delete “'.$category->name.'”?') }})">
                                 @csrf @method('DELETE')
                                 <button type="submit" class="btn-sm danger">Delete</button>
                             </form>

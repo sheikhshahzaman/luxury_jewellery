@@ -9,7 +9,12 @@ use Illuminate\Support\Collection;
 /**
  * Session based shopping cart.
  *
- * Session shape: cart => [product_id => quantity], coupon_code => string|null
+ * Session shape:
+ *   cart => [line_key => ['product_id' => int, 'qty' => int, 'options' => array]]
+ *   coupon_code => string|null
+ *
+ * The same product with different options (e.g. two ring sizes) is two lines.
+ * Stock is tracked per product, so all lines of one product share its stock.
  */
 class CartService
 {
@@ -17,20 +22,63 @@ class CartService
 
     protected const COUPON_KEY = 'coupon_code';
 
-    /** Raw [product_id => qty] map. */
+    /**
+     * Memo of hydrated items, valid only for the exact session contents it
+     * was built from (the service can outlive a request, e.g. in tests/Octane).
+     */
+    protected ?Collection $itemsCache = null;
+
+    protected ?string $itemsCacheFor = null;
+
+    /**
+     * Raw cart lines. Upgrades the legacy [product_id => qty] shape on the fly.
+     *
+     * @return array<string, array{product_id: int, qty: int, options: array}>
+     */
     public function raw(): array
     {
-        return session(self::CART_KEY, []);
+        $lines = [];
+
+        foreach (session(self::CART_KEY, []) as $key => $line) {
+            if (! is_array($line)) {
+                $line = ['product_id' => (int) $key, 'qty' => (int) $line, 'options' => []];
+                $key = self::lineKey((int) $key, []);
+            }
+
+            $lines[(string) $key] = [
+                'product_id' => (int) ($line['product_id'] ?? 0),
+                'qty' => (int) ($line['qty'] ?? 0),
+                'options' => (array) ($line['options'] ?? []),
+            ];
+        }
+
+        return $lines;
+    }
+
+    public static function lineKey(int $productId, array $options): string
+    {
+        if ($options === []) {
+            return 'p'.$productId;
+        }
+
+        ksort($options);
+
+        return 'p'.$productId.'-'.substr(sha1(json_encode($options)), 0, 10);
     }
 
     /**
-     * Hydrated cart rows. Silently drops products that were
-     * deleted or deactivated since being added.
+     * Hydrated cart rows. Silently drops products that were deleted or
+     * deactivated, and clamps quantities to the product's stock.
      *
-     * @return Collection<int, array{product: Product, qty: int, line_total: float}>
+     * @return Collection<int, array{key: string, product: Product, qty: int, options: array, option_lines: array, unit_price: float, line_total: float}>
      */
     public function items(): Collection
     {
+        $fingerprint = serialize(session(self::CART_KEY, []));
+        if ($this->itemsCache !== null && $this->itemsCacheFor === $fingerprint) {
+            return $this->itemsCache;
+        }
+
         $raw = $this->raw();
         if (empty($raw)) {
             return collect();
@@ -38,75 +86,145 @@ class CartService
 
         $products = Product::with('category')
             ->where('is_active', true)
-            ->whereIn('id', array_keys($raw))
+            ->whereIn('id', array_unique(array_column($raw, 'product_id')))
             ->get()
             ->keyBy('id');
 
         $items = collect();
-        $dirty = false;
+        $stockLeft = [];
+        $clean = [];
 
-        foreach ($raw as $id => $qty) {
-            $product = $products->get($id);
-            if (! $product || $product->stock <= 0) {
-                unset($raw[$id]);
-                $dirty = true;
-
+        foreach ($raw as $key => $line) {
+            $product = $products->get($line['product_id']);
+            if (! $product) {
                 continue;
             }
-            $qty = max(1, min((int) $qty, $product->stock));
+
+            $left = $stockLeft[$product->id] ??= (int) $product->stock;
+            $qty = min(max(1, $line['qty']), $left);
+            if ($qty <= 0) {
+                continue;
+            }
+            $stockLeft[$product->id] -= $qty;
+
+            $unit = $product->unitPriceFor($line['options']);
             $items->push([
+                'key' => $key,
                 'product' => $product,
                 'qty' => $qty,
-                'line_total' => round($product->current_price * $qty, 2),
+                'options' => $line['options'],
+                'option_lines' => Product::describeOptions($line['options']),
+                'unit_price' => $unit,
+                'line_total' => round($unit * $qty, 2),
             ]);
+            $clean[$key] = ['product_id' => $product->id, 'qty' => $qty, 'options' => $line['options']];
         }
 
-        if ($dirty) {
-            session([self::CART_KEY => $raw]);
+        if ($clean !== session(self::CART_KEY, [])) {
+            session([self::CART_KEY => $clean]);
         }
 
-        return $items;
+        $this->itemsCacheFor = serialize($clean);
+
+        return $this->itemsCache = $items;
     }
 
-    public function add(Product $product, int $qty = 1): void
+    /** Units of a product already in the cart, across all its option lines. */
+    public function quantityOf(int $productId, ?string $exceptKey = null): int
     {
-        $raw = $this->raw();
-        $current = (int) ($raw[$product->id] ?? 0);
-        $raw[$product->id] = min($current + max(1, $qty), $product->stock);
-        session([self::CART_KEY => $raw]);
+        return collect($this->raw())
+            ->filter(fn ($line, $key) => $line['product_id'] === $productId && $key !== $exceptKey)
+            ->sum('qty');
     }
 
-    public function update(Product $product, int $qty): void
+    /** Adds up to $qty units; returns how many were actually added. */
+    public function add(Product $product, int $qty = 1, array $options = []): int
     {
         $raw = $this->raw();
+        $key = self::lineKey($product->id, $options);
+
+        $room = max(0, (int) $product->stock - $this->quantityOf($product->id));
+        $added = min(max(1, $qty), $room);
+        if ($added <= 0) {
+            return 0;
+        }
+
+        $raw[$key] = [
+            'product_id' => $product->id,
+            'qty' => ($raw[$key]['qty'] ?? 0) + $added,
+            'options' => $options,
+        ];
+        $this->write($raw);
+
+        return $added;
+    }
+
+    /**
+     * Set a line's quantity (0 removes it). Returns the quantity kept,
+     * which may be lower than requested when stock is short, or null
+     * when the line doesn't exist.
+     */
+    public function update(string $key, int $qty): ?int
+    {
+        $raw = $this->raw();
+        if (! isset($raw[$key])) {
+            return null;
+        }
+
         if ($qty <= 0) {
-            unset($raw[$product->id]);
-        } else {
-            $raw[$product->id] = min($qty, $product->stock);
+            unset($raw[$key]);
+            $this->write($raw);
+
+            return 0;
         }
-        session([self::CART_KEY => $raw]);
+
+        $product = Product::find($raw[$key]['product_id']);
+        $room = $product ? max(0, (int) $product->stock - $this->quantityOf($product->id, $key)) : 0;
+        $kept = min($qty, $room);
+
+        if ($kept <= 0) {
+            unset($raw[$key]);
+        } else {
+            $raw[$key]['qty'] = $kept;
+        }
+        $this->write($raw);
+
+        return $kept;
     }
 
-    public function remove(int $productId): void
+    public function remove(string $key): void
     {
         $raw = $this->raw();
-        unset($raw[$productId]);
-        session([self::CART_KEY => $raw]);
+        unset($raw[$key]);
+        $this->write($raw);
+    }
+
+    /** The raw line for a key, or null. */
+    public function line(string $key): ?array
+    {
+        return $this->raw()[$key] ?? null;
     }
 
     public function clear(): void
     {
         session()->forget([self::CART_KEY, self::COUPON_KEY]);
+        $this->itemsCache = null;
     }
 
     public function count(): int
     {
-        return array_sum(array_map('intval', $this->raw()));
+        return (int) array_sum(array_column($this->raw(), 'qty'));
     }
 
     public function subtotal(): float
     {
         return round($this->items()->sum('line_total'), 2);
+    }
+
+    protected function write(array $raw): void
+    {
+        session([self::CART_KEY => $raw]);
+        $this->itemsCache = null;
     }
 
     // ------------------------------------------------------------------
@@ -182,15 +300,25 @@ class CartService
         return round($this->subtotal() - $this->discount() + $this->shippingFee() + $this->tax(), 2);
     }
 
+    /** Extra fee charged for cash on delivery (0 when COD is off). */
+    public static function codFee(): float
+    {
+        return round(max(0, (float) setting('cod_fee', 0)), 2);
+    }
+
+    public static function codEnabled(): bool
+    {
+        return (string) setting('cod_enabled', '1') === '1';
+    }
+
     /** Everything the cart/checkout pages need in one call. */
     public function summary(): array
     {
         $items = $this->items();
-        $subtotal = round($items->sum('line_total'), 2);
 
         return [
             'items' => $items,
-            'subtotal' => $subtotal,
+            'subtotal' => $this->subtotal(),
             'coupon' => $this->coupon(),
             'discount' => $this->discount(),
             'shipping' => $this->shippingFee(),

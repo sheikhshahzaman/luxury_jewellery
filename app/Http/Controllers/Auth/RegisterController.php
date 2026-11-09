@@ -38,6 +38,6 @@ class RegisterController extends Controller
         $request->session()->regenerate();
 
         return redirect()->route('account.dashboard')
-            ->with('success', 'Welcome to '.setting('store_name', 'Eluxee').'! Your account is ready.');
+            ->with('success', 'Welcome to '.setting('store_name', 'Lax Jewellers').'! Your account is ready.');
     }
 }

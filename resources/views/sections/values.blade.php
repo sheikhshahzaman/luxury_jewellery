@@ -1,6 +1,6 @@
 @php
     $valueItems = [
-        ['title' => setting('value_1_title', 'Ethically sourced'),        'text' => setting('value_1_text', 'Traceable stones and certified recycled 18k gold in every piece.')],
+        ['title' => setting('value_1_title', 'Ethically sourced'),        'text' => setting('value_1_text', 'Certified recycled 18k gold in every piece.')],
         ['title' => setting('value_2_title', 'Free worldwide shipping'),  'text' => setting('value_2_text', 'Insured express delivery on all orders over $150.')],
         ['title' => setting('value_3_title', 'Lifetime warranty'),        'text' => setting('value_3_text', 'Complimentary resizing, polishing and repairs, forever.')],
         ['title' => setting('value_4_title', 'Secure checkout'),          'text' => setting('value_4_text', 'Verified bank transfer with a simple upload-and-confirm flow.')],

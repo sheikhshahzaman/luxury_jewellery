@@ -42,6 +42,12 @@ class Category extends Model
         return $query->orderBy('sort_order')->orderBy('name');
     }
 
+    /** Small version for menus (Unsplash URLs are resized server-side by their CDN). */
+    public function getThumbUrlAttribute(): string
+    {
+        return preg_replace('/([?&])w=\d+/', '${1}w=96', $this->image_url);
+    }
+
     public function getImageUrlAttribute(): string
     {
         if (! $this->image) {

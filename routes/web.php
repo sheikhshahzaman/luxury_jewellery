@@ -9,6 +9,7 @@ use App\Http\Controllers\CartController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\PageController;
+use App\Http\Controllers\RatesController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\ShopController;
 use App\Http\Controllers\WishlistController;
@@ -23,14 +24,16 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', [HomeController::class, 'index'])->name('home');
 
 Route::get('/shop', [ShopController::class, 'index'])->name('shop.index');
-Route::get('/search/suggest', [ShopController::class, 'suggest'])->name('search.suggest');
+Route::get('/search/suggest', [ShopController::class, 'suggest'])->middleware('throttle:60,1')->name('search.suggest');
 Route::get('/product/{product}', [ShopController::class, 'show'])->name('product.show');
 
 Route::get('/offers', [PageController::class, 'offers'])->name('page.offers');
+Route::get('/rates', [RatesController::class, 'index'])->name('rates.index');
+Route::get('/rates/live', [RatesController::class, 'live'])->middleware('throttle:120,1')->name('rates.live');
 Route::get('/about', [PageController::class, 'about'])->name('page.about');
 Route::get('/contact', [PageController::class, 'contact'])->name('page.contact');
-Route::post('/contact', [PageController::class, 'submitContact'])->name('page.contact.submit');
-Route::post('/newsletter', [PageController::class, 'subscribe'])->name('newsletter.subscribe');
+Route::post('/contact', [PageController::class, 'submitContact'])->middleware('throttle:5,1')->name('page.contact.submit');
+Route::post('/newsletter', [PageController::class, 'subscribe'])->middleware('throttle:10,1')->name('newsletter.subscribe');
 
 /*
 |--------------------------------------------------------------------------
@@ -40,8 +43,8 @@ Route::post('/newsletter', [PageController::class, 'subscribe'])->name('newslett
 
 Route::get('/cart', [CartController::class, 'index'])->name('cart.index');
 Route::post('/cart/add/{product}', [CartController::class, 'add'])->name('cart.add');
-Route::post('/cart/update/{product}', [CartController::class, 'update'])->name('cart.update');
-Route::post('/cart/remove/{product}', [CartController::class, 'remove'])->name('cart.remove');
+Route::post('/cart/update/{line}', [CartController::class, 'update'])->name('cart.update');
+Route::post('/cart/remove/{line}', [CartController::class, 'remove'])->name('cart.remove');
 Route::post('/coupon/apply', [CartController::class, 'applyCoupon'])->name('coupon.apply');
 Route::post('/coupon/remove', [CartController::class, 'removeCoupon'])->name('coupon.remove');
 
@@ -53,13 +56,14 @@ Route::post('/coupon/remove', [CartController::class, 'removeCoupon'])->name('co
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'show'])->name('login');
-    Route::post('/login', [LoginController::class, 'login']);
+    // Rate limits: brute-force and spam protection (per IP).
+    Route::post('/login', [LoginController::class, 'login'])->middleware('throttle:6,1');
     Route::get('/register', [RegisterController::class, 'show'])->name('register');
-    Route::post('/register', [RegisterController::class, 'register']);
+    Route::post('/register', [RegisterController::class, 'register'])->middleware('throttle:6,1');
     Route::get('/forgot-password', [PasswordResetController::class, 'requestForm'])->name('password.request');
-    Route::post('/forgot-password', [PasswordResetController::class, 'sendLink'])->name('password.email');
+    Route::post('/forgot-password', [PasswordResetController::class, 'sendLink'])->middleware('throttle:5,1')->name('password.email');
     Route::get('/reset-password/{token}', [PasswordResetController::class, 'resetForm'])->name('password.reset');
-    Route::post('/reset-password', [PasswordResetController::class, 'reset'])->name('password.update');
+    Route::post('/reset-password', [PasswordResetController::class, 'reset'])->middleware('throttle:6,1')->name('password.update');
 });
 
 Route::post('/logout', [LoginController::class, 'logout'])->middleware('auth')->name('logout');
@@ -72,18 +76,18 @@ Route::post('/logout', [LoginController::class, 'logout'])->middleware('auth')->
 
 Route::middleware('auth')->group(function () {
     Route::get('/checkout', [CheckoutController::class, 'show'])->name('checkout.show');
-    Route::post('/checkout', [CheckoutController::class, 'place'])->name('checkout.place');
+    Route::post('/checkout', [CheckoutController::class, 'place'])->middleware('throttle:10,1')->name('checkout.place');
     Route::get('/checkout/confirmation/{order}', [CheckoutController::class, 'confirmation'])->name('checkout.confirmation');
     Route::get('/orders/{order}/screenshot', [CheckoutController::class, 'screenshot'])->name('orders.screenshot');
 
     Route::post('/wishlist/{product}', [WishlistController::class, 'toggle'])->name('wishlist.toggle');
-    Route::post('/product/{product}/review', [ReviewController::class, 'store'])->name('product.review');
+    Route::post('/product/{product}/review', [ReviewController::class, 'store'])->middleware('throttle:10,1')->name('product.review');
 
     Route::prefix('account')->name('account.')->group(function () {
         Route::get('/', [AccountController::class, 'dashboard'])->name('dashboard');
         Route::get('/orders', [AccountController::class, 'orders'])->name('orders');
         Route::get('/orders/{order}', [AccountController::class, 'showOrder'])->name('orders.show');
-        Route::post('/orders/{order}/payment', [AccountController::class, 'resubmitPayment'])->name('orders.payment');
+        Route::post('/orders/{order}/payment', [AccountController::class, 'resubmitPayment'])->middleware('throttle:10,1')->name('orders.payment');
         Route::post('/orders/{order}/cancel', [AccountController::class, 'cancelOrder'])->name('orders.cancel');
         Route::get('/profile', [AccountController::class, 'profile'])->name('profile');
         Route::post('/profile', [AccountController::class, 'updateProfile'])->name('profile.update');
@@ -129,6 +133,12 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(fun
     Route::post('reviews/{review}/approve', [Admin\ReviewController::class, 'approve'])->name('reviews.approve');
     Route::post('reviews/{review}/unapprove', [Admin\ReviewController::class, 'unapprove'])->name('reviews.unapprove');
     Route::delete('reviews/{review}', [Admin\ReviewController::class, 'destroy'])->name('reviews.destroy');
+
+    Route::get('rates', [Admin\RateController::class, 'index'])->name('rates.index');
+    Route::post('rates', [Admin\RateController::class, 'update'])->name('rates.update');
+    Route::post('rates/spot', [Admin\RateController::class, 'spot'])->name('rates.spot');
+    Route::post('rates/fetch', [Admin\RateController::class, 'fetch'])->middleware('throttle:6,1')->name('rates.fetch');
+    Route::delete('rates/{rate}', [Admin\RateController::class, 'destroy'])->name('rates.destroy');
 
     Route::get('settings', [Admin\SettingController::class, 'edit'])->name('settings');
     Route::post('settings', [Admin\SettingController::class, 'update'])->name('settings.update');

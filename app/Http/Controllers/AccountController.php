@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Address;
 use App\Models\Order;
+use App\Services\OrderWorkflow;
+use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -49,35 +51,41 @@ class AccountController extends Controller
             return back()->with('error', 'Payment cannot be resubmitted for this order.');
         }
 
-        $request->validate([
+        $data = $request->validate([
             'payment_screenshot' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
-            'payment_reference' => ['nullable', 'string', 'max:120'],
+            'payment_reference' => ['required', 'string', 'max:120'],
+            'payer_name' => ['required', 'string', 'max:255'],
+        ], [
+            'payment_reference.required' => 'Please enter the transaction ID from your receipt.',
+            'payer_name.required' => 'Please enter the name the payment was sent from.',
         ]);
 
-        if ($order->payment_screenshot) {
-            Storage::disk('local')->delete($order->payment_screenshot);
-        }
+        $old = $order->payment_screenshot;
 
         $order->update([
             'payment_screenshot' => $request->file('payment_screenshot')->store('payments'),
-            'payment_reference' => $request->input('payment_reference', $order->payment_reference),
+            'payment_reference' => $data['payment_reference'],
+            'payer_name' => $data['payer_name'],
             'payment_status' => 'submitted',
             'payment_note' => null,
         ]);
 
+        if ($old) {
+            Storage::disk('local')->delete($old);
+        }
+
         return back()->with('success', 'New payment screenshot submitted — we will verify it shortly.');
     }
 
-    public function cancelOrder(Order $order): RedirectResponse
+    public function cancelOrder(Order $order, OrderWorkflow $workflow): RedirectResponse
     {
         $this->authorizeOrder($order);
 
-        if (! $order->isCancellable()) {
-            return back()->with('error', 'This order can no longer be cancelled.');
+        try {
+            $workflow->cancelByCustomer($order);
+        } catch (DomainException $e) {
+            return back()->with('error', $e->getMessage());
         }
-
-        $order->restoreStock();
-        $order->update(['status' => 'cancelled', 'cancelled_at' => now()]);
 
         return back()->with('success', 'Order '.$order->order_number.' has been cancelled.');
     }

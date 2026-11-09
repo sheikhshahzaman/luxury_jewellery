@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', ($activeCategory?->name ?? 'Shop').' — '.setting('store_name', 'Eluxee'))
+@section('title', ($activeCategory?->name ?? 'Shop').' — '.setting('store_name', 'Lax Jewellers'))
 
 @section('content')
 <div class="page-strip">
@@ -25,8 +25,9 @@
                     @endforeach
                 </div>
             </div>
-            <div class="filter-block">
-                <h3>Price</h3>
+            {{-- Collapsible on phones/tablets (eluxee.js closes it there unless a price filter is set). --}}
+            <details class="filter-block filter-price" open data-collapse-mobile @if(request()->hasAny(['min', 'max'])) data-keep-open @endif>
+                <summary><h3>Price</h3></summary>
                 <form method="GET" action="{{ route('shop.index') }}">
                     @foreach (request()->except(['min', 'max', 'page']) as $key => $value)
                         <input type="hidden" name="{{ $key }}" value="{{ $value }}">
@@ -38,7 +39,7 @@
                     </div>
                     <button type="submit" class="btn btn-ghost filter-apply">Apply</button>
                 </form>
-            </div>
+            </details>
             @if (request()->hasAny(['q', 'min', 'max', 'category', 'sort']))
                 <a href="{{ route('shop.index') }}" class="link-quiet">Clear all filters</a>
             @endif

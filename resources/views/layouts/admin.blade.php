@@ -3,18 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@yield('title', 'Admin') · {{ setting('store_name', 'Eluxee') }} Admin</title>
-    <meta name="robots" content="noindex">
+    <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+    <title>@yield('title', 'Admin') · {{ setting('store_name', 'Lax Jewellers') }} Admin</title>
+    <meta name="robots" content="noindex, nofollow">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Jost:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ asset('css/eluxee.css') }}">
-    <link rel="stylesheet" href="{{ asset('css/shop.css') }}">
-    <link rel="stylesheet" href="{{ asset('css/admin.css') }}">
+    <link rel="stylesheet" href="{{ asset_v('css/eluxee.css') }}">
+    <link rel="stylesheet" href="{{ asset_v('css/shop.css') }}">
+    <link rel="stylesheet" href="{{ asset_v('css/admin.css') }}">
+    @stack('styles')
 </head>
 <body class="admin">
     <aside class="adm-sidebar">
-        <a href="{{ route('admin.dashboard') }}" class="adm-brand">{{ setting('store_name', 'Eluxee') }}<span>Admin Panel</span></a>
+        <a href="{{ route('admin.dashboard') }}" class="adm-brand">{{ setting('store_name', 'Lax Jewellers') }}<span>Admin Panel</span></a>
         <nav class="adm-nav">
             <a href="{{ route('admin.dashboard') }}" @class(['on' => request()->routeIs('admin.dashboard')])>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
@@ -38,13 +40,17 @@
                     <span class="pill">{{ $pendingPay }}</span>
                 @endif
             </a>
+            <a href="{{ route('admin.rates.index') }}" @class(['on' => request()->routeIs('admin.rates.*')])>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 17l5-5 4 4 8-8"/><path d="M15 8h5v5"/></svg>
+                Live rates
+            </a>
             <a href="{{ route('admin.coupons.index') }}" @class(['on' => request()->routeIs('admin.coupons.*')])>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 9V5h16v4a2 2 0 0 0 0 6v4H4v-4a2 2 0 0 0 0-6Z"/><path d="M12 5v14" stroke-dasharray="2 3"/></svg>
                 Coupons
             </a>
             <a href="{{ route('admin.bank-accounts.index') }}" @class(['on' => request()->routeIs('admin.bank-accounts.*')])>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12 3 9 6H3l9-6ZM5 9v8m5-8v8m4-8v8m5-8v8M3 21h18"/></svg>
-                Bank accounts
+                Payment accounts
             </a>
             <div class="group">People</div>
             <a href="{{ route('admin.customers.index') }}" @class(['on' => request()->routeIs('admin.customers.*')])>
@@ -116,7 +122,7 @@
         </main>
     </div>
 
-    <script src="{{ asset('js/eluxee.js') }}" defer></script>
+    <script src="{{ asset_v('js/eluxee.js') }}" defer></script>
     @stack('scripts')
 </body>
 </html>

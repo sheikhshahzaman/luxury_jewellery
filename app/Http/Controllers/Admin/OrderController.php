@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Services\OrderWorkflow;
+use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -15,10 +17,13 @@ class OrderController extends Controller
         $orders = Order::with('user')
             ->when($request->query('status'), fn ($q, $s) => $q->where('status', $s))
             ->when($request->query('payment'), fn ($q, $p) => $q->where('payment_status', $p))
+            ->when($request->query('method'), fn ($q, $m) => $q->where('payment_method', $m))
             ->when($request->query('q'), function ($q, $term) {
                 $q->where(function ($sub) use ($term) {
                     $sub->where('order_number', 'like', "%{$term}%")
                         ->orWhere('ship_name', 'like', "%{$term}%")
+                        ->orWhere('ship_phone', 'like', "%{$term}%")
+                        ->orWhere('payment_reference', 'like', "%{$term}%")
                         ->orWhereHas('user', fn ($u) => $u->where('email', 'like', "%{$term}%")->orWhere('name', 'like', "%{$term}%"));
                 });
             })
@@ -36,7 +41,7 @@ class OrderController extends Controller
         return view('admin.orders.show', compact('order'));
     }
 
-    public function updateStatus(Request $request, Order $order): RedirectResponse
+    public function updateStatus(Request $request, Order $order, OrderWorkflow $workflow): RedirectResponse
     {
         $data = $request->validate([
             'status' => ['required', 'in:'.implode(',', Order::STATUSES)],
@@ -44,59 +49,35 @@ class OrderController extends Controller
             'admin_note' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $newStatus = $data['status'];
-        $oldStatus = $order->status;
-
-        if ($newStatus !== $oldStatus) {
-            if ($newStatus === 'cancelled') {
-                $order->restoreStock();
-                $order->cancelled_at = now();
-            } elseif ($oldStatus === 'cancelled') {
-                // Re-activating a cancelled order takes the stock again.
-                foreach ($order->items as $item) {
-                    if ($item->product && $item->product->stock < $item->quantity) {
-                        return back()->with('error', 'Not enough stock to reactivate this order ('.$item->product_name.').');
-                    }
-                }
-                foreach ($order->items as $item) {
-                    $item->product?->decrement('stock', $item->quantity);
-                }
-                $order->cancelled_at = null;
-            }
-
-            if ($newStatus === 'shipped' && ! $order->shipped_at) {
-                $order->shipped_at = now();
-            }
-            if ($newStatus === 'delivered' && ! $order->delivered_at) {
-                $order->delivered_at = now();
-            }
+        try {
+            $order = $workflow->changeStatus($order, $data['status']);
+        } catch (DomainException $e) {
+            return back()->withInput()->with('error', $e->getMessage());
         }
 
-        $order->status = $newStatus;
-        $order->tracking_number = $data['tracking_number'] ?? $order->tracking_number;
-        $order->admin_note = $data['admin_note'] ?? $order->admin_note;
-        $order->save();
-
-        return back()->with('success', 'Order updated to "'.ucfirst($newStatus).'".');
-    }
-
-    public function verifyPayment(Order $order): RedirectResponse
-    {
-        if ($order->payment_status === 'verified') {
-            return back()->with('info', 'Payment is already verified.');
-        }
-
+        // Empty inputs clear the fields.
         $order->update([
-            'payment_status' => 'verified',
-            'payment_verified_at' => now(),
-            'payment_note' => null,
-            'status' => $order->status === 'pending' ? 'processing' : $order->status,
+            'tracking_number' => $data['tracking_number'] ?? null,
+            'admin_note' => $data['admin_note'] ?? null,
         ]);
 
-        return back()->with('success', 'Payment verified — order moved to processing.');
+        return back()->with('success', 'Order updated to "'.ucfirst($order->status).'".');
     }
 
-    public function rejectPayment(Request $request, Order $order): RedirectResponse
+    public function verifyPayment(Order $order, OrderWorkflow $workflow): RedirectResponse
+    {
+        try {
+            $order = $workflow->verifyPayment($order);
+        } catch (DomainException $e) {
+            return back()->with('info', $e->getMessage());
+        }
+
+        return back()->with('success', $order->isCod()
+            ? 'Cash marked as collected.'
+            : 'Payment verified — order moved to '.$order->status.'.');
+    }
+
+    public function rejectPayment(Request $request, Order $order, OrderWorkflow $workflow): RedirectResponse
     {
         $data = $request->validate([
             'payment_note' => ['required', 'string', 'max:1000'],
@@ -104,11 +85,11 @@ class OrderController extends Controller
             'payment_note.required' => 'Please give the customer a reason for the rejection.',
         ]);
 
-        $order->update([
-            'payment_status' => 'rejected',
-            'payment_verified_at' => null,
-            'payment_note' => $data['payment_note'],
-        ]);
+        try {
+            $workflow->rejectPayment($order, $data['payment_note']);
+        } catch (DomainException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return back()->with('success', 'Payment rejected — the customer can resubmit a screenshot.');
     }

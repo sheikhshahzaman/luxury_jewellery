@@ -24,7 +24,8 @@ class DashboardController extends Controller
 
         // Last 6 months of verified sales for the bar chart.
         $monthly = collect(range(5, 0))->map(function (int $back) {
-            $month = now()->subMonths($back);
+            // startOfMonth first: subMonths() on the 31st would skip short months.
+            $month = now()->startOfMonth()->subMonths($back);
 
             return [
                 'label' => $month->format('M'),
@@ -36,11 +37,13 @@ class DashboardController extends Controller
             ];
         });
 
+        // Paid sales only, grouped by product so a rename doesn't split a row.
         $topProducts = DB::table('order_items')
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
             ->where('orders.status', '!=', 'cancelled')
-            ->select('order_items.product_name', DB::raw('SUM(order_items.quantity) as sold'), DB::raw('SUM(order_items.line_total) as revenue'))
-            ->groupBy('order_items.product_name')
+            ->where('orders.payment_status', 'verified')
+            ->select(DB::raw('MAX(order_items.product_name) as product_name'), DB::raw('SUM(order_items.quantity) as sold'), DB::raw('SUM(order_items.line_total) as revenue'))
+            ->groupBy(DB::raw('COALESCE(order_items.product_id, order_items.product_name)'))
             ->orderByDesc('sold')
             ->take(5)
             ->get();
@@ -48,7 +51,7 @@ class DashboardController extends Controller
         return view('admin.dashboard', [
             'revenue' => $revenue,
             'ordersTotal' => Order::count(),
-            'pendingPayments' => Order::where('payment_status', 'submitted')->count(),
+            'pendingPayments' => Order::where('payment_status', 'submitted')->where('status', '!=', 'cancelled')->count(),
             'customersCount' => User::where('role', 'customer')->count(),
             'statusCounts' => $statusCounts,
             'monthly' => $monthly,

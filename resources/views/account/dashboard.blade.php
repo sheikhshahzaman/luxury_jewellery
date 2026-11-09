@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'My account — '.setting('store_name', 'Eluxee'))
+@section('title', 'My account — '.setting('store_name', 'Lax Jewellers'))
 
 @section('content')
 <div class="container account-wrap">
@@ -42,19 +42,19 @@
                 </div>
             @else
                 <div class="table-wrap">
-                    <table class="shop-table">
+                    <table class="shop-table stack">
                         <thead>
                             <tr><th>Order</th><th>Date</th><th>Status</th><th>Payment</th><th style="text-align:right">Total</th><th></th></tr>
                         </thead>
                         <tbody>
                             @foreach ($recentOrders as $order)
                                 <tr>
-                                    <td class="num">{{ $order->order_number }}</td>
-                                    <td>{{ $order->created_at->format('M j, Y') }}</td>
-                                    <td><span class="badge b-{{ $order->status }}">{{ $order->status_label }}</span></td>
-                                    <td><span class="badge b-{{ $order->payment_status }}">{{ $order->payment_status_label }}</span></td>
-                                    <td class="num" style="text-align:right">{{ price_format($order->total) }}</td>
-                                    <td style="text-align:right"><a class="link-quiet" href="{{ route('account.orders.show', $order) }}">View</a></td>
+                                    <td data-label="Order" class="num">{{ $order->order_number }}</td>
+                                    <td data-label="Date">{{ $order->created_at->format('M j, Y') }}</td>
+                                    <td data-label="Status"><span class="badge b-{{ $order->status }}">{{ $order->status_label }}</span></td>
+                                    <td data-label="Payment"><span class="badge b-{{ $order->payment_status }}">{{ $order->payment_status_label }}</span></td>
+                                    <td data-label="Total" class="num" style="text-align:right">{{ price_format($order->total) }}</td>
+                                    <td class="row-action" style="text-align:right"><a class="link-quiet" href="{{ route('account.orders.show', $order) }}">View</a></td>
                                 </tr>
                             @endforeach
                         </tbody>

@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Checkout — '.setting('store_name', 'Eluxee'))
+@section('title', 'Checkout — '.setting('store_name', 'Lax Jewellers'))
 
 @section('content')
 <div class="page-strip">
@@ -17,7 +17,7 @@
         </div>
     @endif
 
-    <form method="POST" action="{{ route('checkout.place') }}" enctype="multipart/form-data">
+    <form method="POST" action="{{ route('checkout.place') }}" enctype="multipart/form-data" id="checkoutForm">
         @csrf
         <div class="checkout-grid">
             <div>
@@ -61,7 +61,7 @@
                         </div>
                         <div class="field full">
                             <label for="order_note">Order note (optional)</label>
-                            <textarea id="order_note" name="order_note" style="min-height:70px" placeholder="Gift wrap, ring size, delivery instructions…">{{ old('order_note') }}</textarea>
+                            <textarea id="order_note" name="order_note" style="min-height:70px" placeholder="Gift wrap, delivery instructions…">{{ old('order_note') }}</textarea>
                         </div>
                     </div>
                     <label class="checkbox-row">
@@ -70,67 +70,115 @@
                     </label>
                 </section>
 
-                {{-- 2 · Bank transfer --}}
+                {{-- 2 · Payment method --}}
+                @php
+                    $selectedMethod = old('payment_method', array_key_first($methods));
+                    $methodHints = [
+                        'bank' => 'Transfer to our bank account',
+                        'jazzcash' => 'Send from your JazzCash wallet',
+                        'easypaisa' => 'Send from your Easypaisa wallet',
+                        'cod' => 'Pay in cash when it arrives',
+                    ];
+                @endphp
                 <section class="co-section">
-                    <h2><span class="co-num">2</span> Pay by bank transfer</h2>
-                    <p class="co-sub">Transfer the order total to one of our accounts below, then upload your payment receipt.</p>
+                    <h2><span class="co-num">2</span> Payment method</h2>
+                    <p class="co-sub">Choose how you would like to pay. Online payments are confirmed by our team after you upload the receipt.</p>
 
-                    @if ($bankAccounts->isEmpty())
-                        <div class="reject-note">Online payment is temporarily unavailable — no bank account is configured. Please contact us to complete your order.</div>
+                    @if ($methods === [])
+                        <div class="reject-note">Checkout is temporarily unavailable — no payment method is configured. Please contact us to complete your order.</div>
                     @else
-                        <div class="bank-list">
-                            @foreach ($bankAccounts as $i => $account)
-                                <label class="bank-card @if(old('bank_account_id', $bankAccounts->first()->id) == $account->id) selected @endif">
-                                    <input type="radio" name="bank_account_id" value="{{ $account->id }}" @checked(old('bank_account_id', $bankAccounts->first()->id) == $account->id) required>
-                                    <div class="bc-head">
-                                        <span class="bc-bank">{{ $account->bank_name }}</span>
-                                        <span class="bc-radio"></span>
-                                    </div>
-                                    <dl class="bank-details">
-                                        <div><dt>Account name</dt><dd>{{ $account->account_name }}</dd></div>
-                                        <div><dt>Account number</dt><dd>{{ $account->account_number }}</dd></div>
-                                        @if ($account->iban)
-                                            <div><dt>IBAN</dt><dd>{{ $account->iban }}</dd></div>
-                                        @endif
-                                        @if ($account->swift_code)
-                                            <div><dt>SWIFT</dt><dd>{{ $account->swift_code }}</dd></div>
-                                        @endif
-                                        @if ($account->branch)
-                                            <div><dt>Branch</dt><dd>{{ $account->branch }}</dd></div>
-                                        @endif
-                                        @if ($account->instructions)
-                                            <span class="bd-instructions">{{ $account->instructions }}</span>
-                                        @endif
-                                    </dl>
+                        <div class="pay-methods" role="radiogroup" aria-label="Payment method">
+                            @foreach ($methods as $method => $label)
+                                <label class="pay-method">
+                                    <input type="radio" name="payment_method" value="{{ $method }}" id="pm-{{ $method }}" @checked($selectedMethod === $method)>
+                                    <span class="pm-icon pm-{{ $method }}" aria-hidden="true">
+                                        @switch($method)
+                                            @case('bank')<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12 3 9 6H3l9-6ZM5 9v8m5-8v8m4-8v8m5-8v8M3 21h18"/></svg>@break
+                                            @case('cod')<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9v.01M18 15v.01"/></svg>@break
+                                            @default<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg>
+                                        @endswitch
+                                    </span>
+                                    <span class="pm-text"><b>{{ $label }}</b><small>{{ $methodHints[$method] ?? '' }}</small></span>
+                                    <span class="bc-radio"></span>
                                 </label>
                             @endforeach
                         </div>
+                        @error('payment_method')<span class="field-error">{{ $message }}</span>@enderror
+
+                        @foreach ($accountsByMethod as $method => $accounts)
+                            @continue(! isset($methods[$method]))
+                            <div class="pay-panel" data-method="{{ $method }}">
+                                <p class="pp-title">Send {{ price_format($total) }} to {{ $accounts->count() > 1 ? 'one of these accounts' : 'this account' }}</p>
+                                <div class="bank-list">
+                                    @foreach ($accounts as $account)
+                                        @php $isSelected = (string) old('bank_account_id', $accounts->first()->id) === (string) $account->id; @endphp
+                                        <label @class(['bank-card', 'selected' => $isSelected])>
+                                            <input type="radio" name="bank_account_id" value="{{ $account->id }}" @checked($isSelected && $selectedMethod === $method)>
+                                            <div class="bc-head">
+                                                <span class="bc-bank">{{ $account->display_name }}</span>
+                                                <span class="bc-radio"></span>
+                                            </div>
+                                            <dl class="bank-details">
+                                                <div><dt>{{ $account->isWallet() ? 'Account title' : 'Account name' }}</dt><dd>{{ $account->account_name }}</dd></div>
+                                                <div><dt>{{ $account->isWallet() ? 'Mobile number' : 'Account number' }}</dt><dd>{{ $account->account_number }} <button type="button" class="copy-btn" data-copy="{{ $account->account_number }}">Copy</button></dd></div>
+                                                @if ($account->iban)
+                                                    <div><dt>IBAN</dt><dd>{{ $account->iban }} <button type="button" class="copy-btn" data-copy="{{ $account->iban }}">Copy</button></dd></div>
+                                                @endif
+                                                @if ($account->swift_code)
+                                                    <div><dt>SWIFT</dt><dd>{{ $account->swift_code }}</dd></div>
+                                                @endif
+                                                @if ($account->branch)
+                                                    <div><dt>Branch</dt><dd>{{ $account->branch }}</dd></div>
+                                                @endif
+                                                @if ($account->instructions)
+                                                    <span class="bd-instructions">{{ $account->instructions }}</span>
+                                                @endif
+                                            </dl>
+                                        </label>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endforeach
                         @error('bank_account_id')<span class="field-error">{{ $message }}</span>@enderror
 
-                        <div class="pay-note">
-                            ✦ Transfer exactly <b>{{ price_format($total) }}</b> and keep your receipt. Your order ships once our team verifies the payment — usually within a few hours.
-                        </div>
+                        @isset($methods['cod'])
+                            <div class="pay-panel" data-method="cod">
+                                <div class="pay-note">
+                                    ✦ Pay <b>{{ price_format($total + $codFee) }}</b> in cash to the courier when your order arrives.
+                                    @if ($codFee > 0) This includes a {{ price_format($codFee) }} cash-handling fee. @endif
+                                    No receipt is needed — we will call to confirm before dispatch.
+                                </div>
+                            </div>
+                        @endisset
                     @endif
                 </section>
 
                 {{-- 3 · Payment proof --}}
-                <section class="co-section">
-                    <h2><span class="co-num">3</span> Upload payment screenshot</h2>
-                    <p class="co-sub">A clear photo or screenshot of the completed transfer. JPG, PNG or WEBP, max 5&nbsp;MB.</p>
+                <section class="co-section proof-section">
+                    <h2><span class="co-num">3</span> Payment receipt</h2>
+                    <p class="co-sub">After sending the payment, upload a screenshot of the receipt and enter its details. Your order stays <b style="font-weight:400">pending</b> until our team verifies it.</p>
+
+                    <div class="form-grid">
+                        <div class="field">
+                            <label for="payment_reference">Transaction ID</label>
+                            <input id="payment_reference" type="text" name="payment_reference" value="{{ old('payment_reference') }}" placeholder="e.g. 0123456789" autocomplete="off">
+                            @error('payment_reference')<span class="field-error">{{ $message }}</span>@enderror
+                        </div>
+                        <div class="field">
+                            <label for="payer_name">Sent from (account holder name)</label>
+                            <input id="payer_name" type="text" name="payer_name" value="{{ old('payer_name', auth()->user()->name) }}">
+                            @error('payer_name')<span class="field-error">{{ $message }}</span>@enderror
+                        </div>
+                    </div>
 
                     <div class="upload-box @if($errors->has('payment_screenshot')) has-file @endif" id="uploadBox">
                         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M12 16V4m0 0 4 4m-4-4L8 8"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
-                        <div class="up-title">Click to upload your transfer receipt</div>
-                        <div class="up-hint">This is required to finalise your order</div>
+                        <div class="up-title">Click to upload your payment receipt</div>
+                        <div class="up-hint">Screenshot or photo · JPG, PNG or WEBP · max 5&nbsp;MB</div>
                         <img id="uploadPreview" class="upload-preview" alt="Payment screenshot preview">
                         <input type="file" name="payment_screenshot" accept="image/jpeg,image/png,image/webp">
                     </div>
                     @error('payment_screenshot')<span class="field-error" style="display:block;margin-top:10px">{{ $message }}</span>@enderror
-
-                    <div class="field" style="margin-top:22px;margin-bottom:0">
-                        <label for="payment_reference">Transaction reference (optional)</label>
-                        <input id="payment_reference" type="text" name="payment_reference" value="{{ old('payment_reference') }}" placeholder="e.g. TRX-8842105">
-                    </div>
                 </section>
             </div>
 
@@ -143,6 +191,9 @@
                             <img src="{{ $line['product']->image_url }}" alt="{{ $line['product']->name }}">
                             <div>
                                 <div class="ci-name">{{ $line['product']->name }}</div>
+                                @if ($line['option_lines'])
+                                    <div class="opt-lines">@foreach ($line['option_lines'] as $opt)<span>{{ $opt }}</span>@endforeach</div>
+                                @endif
                                 <div class="ci-qty">Qty {{ $line['qty'] }}</div>
                             </div>
                             <span class="ci-price">{{ price_format($line['line_total']) }}</span>
@@ -157,13 +208,16 @@
                 @if ($tax > 0)
                     <div class="sum-row"><span>Tax</span><b>{{ price_format($tax) }}</b></div>
                 @endif
-                <div class="sum-row total"><span>Total to transfer</span><span>{{ price_format($total) }}</span></div>
+                @if ($codFee > 0 && isset($methods['cod']))
+                    <div class="sum-row cod-only"><span>Cash on delivery fee</span><b>{{ price_format($codFee) }}</b></div>
+                @endif
+                <div class="sum-row total"><span>Total</span><span id="coTotal" data-total="{{ price_format($total) }}" data-total-cod="{{ price_format($total + $codFee) }}">{{ price_format($selectedMethod === 'cod' ? $total + $codFee : $total) }}</span></div>
 
-                <button type="submit" class="btn btn-solid" @if($bankAccounts->isEmpty()) disabled style="opacity:.6" @endif>
+                <button type="submit" class="btn btn-solid" @if($methods === []) disabled style="opacity:.6" @endif>
                     Place order
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
                 </button>
-                <div class="free-ship-note">By placing this order you confirm the transfer has been made.</div>
+                <div class="free-ship-note pay-online-only">By placing this order you confirm the payment has been sent.</div>
             </aside>
         </div>
     </form>

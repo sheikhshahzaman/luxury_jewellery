@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Coupon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class CouponController extends Controller
@@ -50,8 +52,11 @@ class CouponController extends Controller
 
     protected function validated(Request $request, ?int $ignoreId = null): array
     {
+        // Codes are stored uppercase, so check uniqueness on the uppercased value.
+        $request->merge(['code' => strtoupper(trim((string) $request->input('code')))]);
+
         $data = $request->validate([
-            'code' => ['required', 'string', 'max:50', 'unique:coupons,code'.($ignoreId ? ','.$ignoreId : '')],
+            'code' => ['required', 'string', 'max:50', Rule::unique('coupons', 'code')->ignore($ignoreId)],
             'type' => ['required', 'in:percent,fixed'],
             'value' => ['required', 'numeric', 'min:0.01'],
             'min_order' => ['nullable', 'numeric', 'min:0'],
@@ -66,7 +71,10 @@ class CouponController extends Controller
             $data['value'] = 100;
         }
 
-        $data['code'] = strtoupper(trim($data['code']));
+        // A coupon "expiring 31 Oct" should work for the whole of 31 Oct.
+        if (! empty($data['expires_at'])) {
+            $data['expires_at'] = Carbon::parse($data['expires_at'])->endOfDay();
+        }
         $data['is_active'] = $request->boolean('is_active');
         $data['is_public'] = $request->boolean('is_public');
 

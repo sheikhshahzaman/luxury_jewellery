@@ -80,7 +80,7 @@
 .pager .dots-p{border:none}
 
 /* ---------- Product detail ---------- */
-.pd{padding:64px 0 96px}
+.pd{padding-block:64px 96px}
 .pd-grid{display:grid;grid-template-columns:1.02fr .98fr;gap:64px;align-items:start}
 .pd-gallery{position:sticky;top:110px}
 .pd-main{border-radius:999px 999px var(--radius) var(--radius);overflow:hidden;aspect-ratio:4/4.6;background:var(--porcelain);border:1px solid var(--line)}
@@ -113,7 +113,7 @@
 .pd-meta div{display:flex;justify-content:space-between;gap:20px;padding:13px 0;border-bottom:1px solid var(--line);font-size:14px}
 .pd-meta dt{color:var(--moss);letter-spacing:.08em}
 .pd-meta dd{text-align:right}
-.pd-section{padding:0 0 96px}
+.pd-section{padding-block:0 96px}
 .pd-section h2{font-size:clamp(26px,3vw,34px);margin-bottom:28px}
 .pd-details-body{color:var(--moss);font-size:15px;max-width:72ch;white-space:pre-line}
 
@@ -132,7 +132,7 @@
 .review-form-card h3{font-family:var(--display);font-size:20px;margin-bottom:18px}
 
 /* ---------- Cart ---------- */
-.cart-wrap{padding:56px 0 96px}
+.cart-wrap{padding-block:56px 96px}
 .cart-grid{display:grid;grid-template-columns:1.6fr .9fr;gap:44px;align-items:start}
 .cart-lines{display:flex;flex-direction:column}
 .cart-line{display:grid;grid-template-columns:96px 1fr auto;gap:22px;padding:22px 0;border-bottom:1px solid var(--line);align-items:center}
@@ -165,7 +165,7 @@
 .free-ship-note{font-size:12px;letter-spacing:.1em;color:var(--moss);text-align:center;margin-top:14px}
 
 /* ---------- Checkout ---------- */
-.checkout-wrap{padding:56px 0 96px}
+.checkout-wrap{padding-block:56px 96px}
 .checkout-grid{display:grid;grid-template-columns:1.5fr 1fr;gap:44px;align-items:start}
 .co-section{background:var(--porcelain);border:1px solid var(--line);border-radius:calc(var(--radius) + 4px);padding:36px;margin-bottom:26px}
 .co-section > h2{font-family:var(--display);font-size:22px;margin-bottom:6px;display:flex;align-items:center;gap:14px}
@@ -200,10 +200,40 @@
 .co-item .ci-name{font-size:14px}
 .co-item .ci-qty{font-size:12px;color:var(--moss);letter-spacing:.08em}
 .co-item .ci-price{margin-left:auto;font-family:var(--display);font-size:15px;white-space:nowrap}
+/* Payment methods */
+.pay-methods{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:22px}
+.pay-method{position:relative;display:flex;align-items:center;gap:14px;border:1px solid var(--line);border-radius:16px;background:var(--ivory);padding:16px 18px;cursor:pointer;transition:border-color .25s,box-shadow .25s,transform .25s}
+.pay-method:hover{border-color:var(--champagne);transform:translateY(-2px)}
+.pay-method input{position:absolute;opacity:0;pointer-events:none}
+.pay-method .pm-icon{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:none;background:var(--porcelain);color:var(--forest);border:1px solid var(--line)}
+.pay-method .pm-jazzcash{color:#B4232C}
+.pay-method .pm-easypaisa{color:#1F8A4C}
+.pay-method .pm-cod{color:#8A6D3B}
+.pay-method .pm-text{display:flex;flex-direction:column;line-height:1.3;flex:1}
+.pay-method .pm-text b{font-weight:400;font-family:var(--display);font-size:16px}
+.pay-method .pm-text small{font-size:12px;color:var(--moss);margin-top:3px}
+.pay-method .bc-radio{width:20px;height:20px;border:1px solid var(--line-dark);border-radius:50%;position:relative;flex:none}
+.pay-method:has(input:checked){border-color:var(--champagne);box-shadow:0 0 0 1px var(--champagne)}
+.pay-method:has(input:checked) .bc-radio::after{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--champagne)}
+.pay-method:has(input:focus-visible){outline:2px solid var(--champagne);outline-offset:2px}
+.pay-panel{display:none;animation:panelIn .45s ease}
+.pp-title{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--moss);margin-bottom:12px}
+@keyframes panelIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+#checkoutForm:has(#pm-bank:checked) .pay-panel[data-method="bank"],
+#checkoutForm:has(#pm-jazzcash:checked) .pay-panel[data-method="jazzcash"],
+#checkoutForm:has(#pm-easypaisa:checked) .pay-panel[data-method="easypaisa"],
+#checkoutForm:has(#pm-cod:checked) .pay-panel[data-method="cod"]{display:block}
+#checkoutForm:has(#pm-cod:checked) .proof-section,
+#checkoutForm:has(#pm-cod:checked) .pay-online-only{display:none}
+#checkoutForm .cod-only{display:none}
+#checkoutForm:has(#pm-cod:checked) .cod-only{display:flex}
+.copy-btn{margin-left:8px;font-size:10px;letter-spacing:.16em;text-transform:uppercase;border:1px solid var(--line);background:var(--porcelain);border-radius:999px;padding:3px 9px;color:var(--moss);transition:all .2s}
+.copy-btn:hover{border-color:var(--champagne);color:var(--forest)}
+.copy-btn.copied{background:var(--forest);color:var(--ivory);border-color:var(--forest)}
 .pay-note{background:var(--champagne-soft);border-radius:14px;padding:16px 18px;font-size:13px;color:var(--forest);line-height:1.6;margin-top:18px}
 
 /* ---------- Account area ---------- */
-.account-wrap{padding:56px 0 96px}
+.account-wrap{padding-block:56px 96px}
 .account-layout{display:grid;grid-template-columns:240px 1fr;gap:48px;align-items:start}
 .side-nav{background:var(--porcelain);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;position:sticky;top:100px}
 .side-nav a{display:flex;align-items:center;gap:12px;padding:15px 22px;font-size:13px;letter-spacing:.14em;text-transform:uppercase;border-bottom:1px solid var(--line);color:var(--moss);transition:all .2s}
@@ -236,6 +266,9 @@ table.shop-table{width:100%;border-collapse:collapse;font-size:14px;min-width:56
 .b-submitted{background:#F2EAD8;color:#8A6D3B}
 .b-verified{background:#E3F2E6;color:#3B7A4A}
 .b-rejected{background:#F2E3E3;color:#7A3B3B}
+.b-unpaid{background:#EAE6F2;color:#5B4A7A}
+.opt-lines{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.opt-lines span{font-size:11px;letter-spacing:.08em;padding:3px 9px;border-radius:999px;background:var(--porcelain);border:1px solid var(--line);color:var(--moss)}
 .link-quiet{font-size:12px;letter-spacing:.16em;text-transform:uppercase;border-bottom:1px solid var(--forest);padding-bottom:3px;white-space:nowrap}
 .link-quiet:hover{color:var(--champagne);border-color:var(--champagne)}
 
@@ -258,25 +291,37 @@ table.shop-table{width:100%;border-collapse:collapse;font-size:14px;min-width:56
 /* ---------- Wishlist ---------- */
 .wish-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:26px}
 
-/* ---------- Brand logo + name (header) ---------- */
-.nav .brand{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding-left:0;min-width:0}
-.nav .brand .brand-name{font-family:var(--display);font-size:clamp(16px,1.5vw,21px);letter-spacing:.13em;text-transform:uppercase;white-space:nowrap;line-height:1}
-.brand-logo{height:36px;width:auto;max-width:120px;object-fit:contain;display:block;flex:none}
-.nav-links{gap:22px;font-size:12.5px;letter-spacing:.1em}
-.nav-links a{white-space:nowrap}
+/* ---------- Header: [logo] [links, centred] [icons] ---------- */
+.nav{grid-template-columns:auto 1fr auto;gap:32px}
+.nav .brand{display:inline-flex;align-items:center;gap:12px;padding-left:0;min-width:0;text-align:left;color:var(--forest)}
+.brand-mark{width:30px;height:27px;flex:none;color:var(--champagne);transition:transform .5s cubic-bezier(.3,1.5,.5,1)}
+.brand:hover .brand-mark{transform:rotate(-8deg) scale(1.06)}
+.nav .brand .brand-name{font-family:var(--display);font-size:19px;letter-spacing:.22em;text-transform:uppercase;white-space:nowrap;line-height:1}
+.brand-logo{height:40px;width:auto;max-width:170px;object-fit:contain;display:block;flex:none}
+.nav-links{justify-content:center;gap:clamp(18px,2.2vw,34px);font-size:12.5px;letter-spacing:.14em}
+.nav-links a,.nav-drop-btn{white-space:nowrap}
+.nav-links{align-items:center}
+.nav-links li{display:flex;align-items:center}
+.nav-drop-btn{line-height:inherit;font-weight:inherit}
+.footer-brand .brand{display:inline-flex;align-items:center;gap:12px}
+.footer-brand .brand-mark{width:28px;height:25px}
 
-/* Collapse the horizontal links into the hamburger before a long brand name
-   can crowd them — the header stays [menu] [brand] [actions], which always fits. */
-@media (max-width:1000px){
-  .nav{grid-template-columns:auto 1fr auto}
+.nav-rates{display:inline-flex;align-items:center;gap:7px}
+.nav-live{width:6px;height:6px;border-radius:50%;background:#4FB477;box-shadow:0 0 0 0 rgba(79,180,119,.55);animation:navLive 1.8s ease-out infinite}
+@keyframes navLive{100%{box-shadow:0 0 0 7px rgba(79,180,119,0)}}
+@media (prefers-reduced-motion:reduce){.nav-live{animation:none}}
+
+/* Below 1200px the links move into the hamburger: [menu] [logo] [icons]. */
+@media (max-width:1200px){
+  .nav{grid-template-columns:auto 1fr auto;gap:16px}
   .nav-links{display:none}
   .menu-toggle{display:inline-flex}
-  .nav .brand{justify-content:flex-start}
 }
 @media (max-width:640px){
-  .nav .brand{gap:8px}
-  .nav .brand .brand-name{font-size:15px;letter-spacing:.1em}
-  .brand-logo{height:28px;max-width:80px}
+  .nav .brand{gap:9px}
+  .brand-mark{width:24px;height:22px}
+  .nav .brand .brand-name{font-size:14px;letter-spacing:.14em}
+  .brand-logo{height:30px;max-width:110px}
   /* Account + wishlist live in the hamburger menu on mobile; keep search + cart in the bar. */
   .nav-actions{gap:16px}
   .nav-actions .account-icon{display:none}
@@ -338,7 +383,7 @@ table.shop-table{width:100%;border-collapse:collapse;font-size:14px;min-width:56
 }
 
 /* ---------- Contact / about ---------- */
-.contact-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:56px;padding:64px 0 96px;align-items:start}
+.contact-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:56px;padding-block:64px 96px;align-items:start}
 .contact-info h2{font-size:clamp(26px,3vw,36px);margin-bottom:16px}
 .contact-info p{color:var(--moss);margin-bottom:28px;max-width:44ch}
 .contact-rows{display:flex;flex-direction:column;gap:18px}
@@ -377,4 +422,99 @@ table.shop-table{width:100%;border-collapse:collapse;font-size:14px;min-width:56
   .timeline{flex-wrap:wrap;gap:14px 0}
   .timeline div{flex-basis:33%}
   .timeline div::after{display:none}
+}
+
+/* Jewellery options (product page) */
+.pd-buy{margin:26px 0 18px}
+.pd-buy .pd-form{margin:22px 0 0}
+.pd-options{display:flex;flex-direction:column;gap:22px}
+.opt-group{border:none;padding:0;margin:0}
+.opt-group legend,.opt-label{display:flex;align-items:baseline;gap:10px;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--moss);margin-bottom:12px}
+.opt-label small{letter-spacing:.06em;text-transform:none;font-size:12px}
+.opt-chosen{letter-spacing:.04em;text-transform:none;color:var(--forest);font-size:14px}
+.metal-swatches{display:flex;flex-wrap:wrap;gap:10px}
+.metal-swatch{position:relative;display:inline-flex;align-items:center;gap:10px;padding:8px 14px 8px 8px;border:1px solid var(--line);border-radius:999px;background:var(--porcelain);cursor:pointer;transition:border-color .25s,box-shadow .25s,transform .25s}
+.metal-swatch:hover{transform:translateY(-2px);border-color:var(--champagne)}
+.metal-swatch input{position:absolute;opacity:0;pointer-events:none}
+.metal-swatch:has(input:checked){border-color:var(--forest);box-shadow:0 0 0 1px var(--forest)}
+.metal-swatch:has(input:focus-visible){outline:2px solid var(--champagne);outline-offset:2px}
+.sw{width:26px;height:26px;border-radius:50%;box-shadow:inset 0 -3px 6px rgba(0,0,0,.18),inset 0 3px 6px rgba(255,255,255,.55),0 2px 6px -2px rgba(30,41,33,.4)}
+.sw-gold{background:radial-gradient(circle at 32% 28%,#FFF4C9,#E8C268 38%,#B88A2E 75%,#8C6420)}
+.sw-rose{background:radial-gradient(circle at 32% 28%,#FFE7DD,#E9A98F 38%,#C27A62 75%,#94553F)}
+.sw-white{background:radial-gradient(circle at 32% 28%,#FFFFFF,#E6E7EA 40%,#B9BCC2 78%,#8E9198)}
+.sw-platinum{background:radial-gradient(circle at 32% 28%,#FFFFFF,#DCDDE0 40%,#A9ACB2 78%,#7D8087)}
+.sw-silver{background:radial-gradient(circle at 32% 28%,#FFFFFF,#D7D9DD 40%,#A3A7AE 78%,#767A82)}
+.sw-name{font-size:14px}
+.sw-price{font-size:12px;color:var(--champagne);letter-spacing:.04em}
+.size-chips{display:flex;flex-wrap:wrap;gap:8px}
+.size-chip{position:relative;cursor:pointer}
+.size-chip input{position:absolute;opacity:0;pointer-events:none}
+.size-chip span{display:inline-flex;align-items:center;justify-content:center;min-width:46px;height:42px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--porcelain);font-size:14px;transition:all .2s}
+.size-chip:hover span{border-color:var(--champagne)}
+.size-chip input:checked + span{background:var(--forest);color:var(--ivory);border-color:var(--forest)}
+.size-chip input:focus-visible + span{outline:2px solid var(--champagne);outline-offset:2px}
+.engrave-field{position:relative}
+.engrave-field input{width:100%;padding:14px 64px 14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--porcelain);font-family:var(--body);font-size:15px;color:var(--forest);outline:none;transition:border-color .2s}
+.engrave-field input:focus{border-color:var(--champagne)}
+.engrave-count{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--moss)}
+.engrave-preview{margin-top:10px;min-height:0;font-family:var(--display);font-style:italic;font-size:20px;letter-spacing:.12em;background:linear-gradient(100deg,#8C6420,#E8C268 40%,#FFF4C9 50%,#E8C268 60%,#8C6420);-webkit-background-clip:text;background-clip:text;color:transparent;background-size:200% 100%;animation:engraveShine 4s linear infinite}
+.engrave-preview:empty,.engrave-preview span:empty{display:none}
+@keyframes engraveShine{to{background-position:-200% 0}}
+.quick-add{display:block;text-align:center}
+
+/* ---------- Responsive safety: grid columns may shrink below their content ----------
+   Grid items default to min-width:auto, so a wide table or long word inside one
+   column pushes the whole page wider than a phone. Wide content scrolls inside
+   its own wrapper (.table-wrap / .adm-table-wrap) instead. */
+.account-layout > *, .cart-grid > *, .checkout-grid > *, .order-cols > *,
+.pd-grid > *, .shop-layout > *, .contact-grid > *, .boards-grid > *,
+.spot-grid > *, .anx-ui > *, .hero-grid > *, .edit-grid > *{min-width:0}
+.account-head h1, .pd-info h1, .ci-name, .cl-name{overflow-wrap:anywhere}
+
+/* ---------- Shop filters: collapsible price ---------- */
+.filter-price summary{list-style:none;cursor:default}
+.filter-price summary::-webkit-details-marker{display:none}
+.filter-price summary h3{display:flex;justify-content:space-between;align-items:center}
+
+/* ---------- Phones & tablets ---------- */
+@media (max-width:1024px){
+  /* Shop: categories become a swipeable chip row, price folds away. */
+  .filters{flex-direction:column;flex-wrap:nowrap;gap:14px}
+  .filters > *{width:100%;min-width:0;max-width:100%}
+  .filter-block h3{margin-bottom:10px}
+  .filter-list{flex-direction:row;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 -24px;padding:0 24px 4px;scroll-snap-type:x proximity;scroll-padding-inline:24px}
+  .filter-list::-webkit-scrollbar{display:none}
+  .filter-list a{flex:none;gap:6px;align-items:center;padding:9px 14px;border:1px solid var(--line);border-radius:999px;background:var(--porcelain);white-space:nowrap;scroll-snap-align:start}
+  .filter-list a.on{margin-left:0;padding-left:14px;border-left:1px solid var(--forest);background:var(--forest);color:var(--ivory)}
+  .filter-list a.on span{color:var(--champagne-soft)}
+  .filter-price{border:1px solid var(--line);border-radius:14px;padding:12px 16px;background:var(--porcelain)}
+  .filter-price summary{cursor:pointer}
+  .filter-price summary h3{margin:0}
+  .filter-price summary h3::after{content:"+";font-size:18px;color:var(--champagne);letter-spacing:0}
+  .filter-price[open] summary h3::after{content:"−"}
+  .filter-price[open] form{margin-top:12px}
+
+  /* Account: the section menu becomes a swipeable pill row. */
+  .side-nav{position:static;display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;background:none;border:none;border-radius:0;margin:0 -24px;padding:0 24px 4px}
+  .side-nav::-webkit-scrollbar{display:none}
+  .side-nav a{flex:none;padding:10px 16px;border:1px solid var(--line);border-radius:999px;background:var(--porcelain);font-size:12px;letter-spacing:.1em}
+  .side-nav a:last-child{border-bottom:1px solid var(--line)}
+  .side-nav a.on{border-left:1px solid var(--forest);background:var(--forest);color:var(--ivory)}
+  .account-layout{gap:28px}
+}
+@media (max-width:640px){
+  .side-nav{grid-template-columns:none}
+
+  /* Order tables turn into stacked cards with labels. */
+  .table-wrap:has(.shop-table.stack){border:none;background:none;overflow:visible}
+  table.shop-table.stack{min-width:0}
+  .shop-table.stack thead{display:none}
+  .shop-table.stack tbody{display:grid;gap:12px}
+  .shop-table.stack tr{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;padding:16px 18px;border:1px solid var(--line);border-radius:16px;background:var(--porcelain)}
+  .shop-table.stack td{display:flex;flex-direction:column;gap:4px;padding:0;border:none;text-align:left!important;min-width:0}
+  .shop-table.stack td::before{content:attr(data-label);font-family:var(--body);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--moss)}
+  .shop-table.stack td.num{overflow-wrap:anywhere}
+  .shop-table.stack td.row-action{grid-column:1/-1;flex-direction:row;justify-content:flex-end;border-top:1px solid var(--line);padding-top:10px}
+  .shop-table.stack td.row-action::before{content:none}
+  .shop-table.stack .badge{align-self:flex-start;white-space:normal}
 }

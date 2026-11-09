@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Reset password — '.setting('store_name', 'Eluxee'))
+@section('title', 'Reset password — '.setting('store_name', 'Lax Jewellers'))
 
 @section('content')
 <div class="auth-wrap">

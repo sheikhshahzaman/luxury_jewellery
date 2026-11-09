@@ -5,7 +5,7 @@
 @section('content')
 <div class="adm-toolbar">
     <form method="GET" action="{{ route('admin.orders.index') }}">
-        <input type="search" name="q" value="{{ request('q') }}" placeholder="Order #, customer…">
+        <input type="search" name="q" value="{{ request('q') }}" placeholder="Order #, customer, phone, transaction ID…">
         <select name="status" onchange="this.form.submit()">
             <option value="">Any status</option>
             @foreach (\App\Models\Order::STATUSES as $status)
@@ -17,6 +17,13 @@
             <option value="submitted" @selected(request('payment') === 'submitted')>Awaiting verification</option>
             <option value="verified" @selected(request('payment') === 'verified')>Verified</option>
             <option value="rejected" @selected(request('payment') === 'rejected')>Rejected</option>
+            <option value="unpaid" @selected(request('payment') === 'unpaid')>Cash on delivery — due</option>
+        </select>
+        <select name="method" onchange="this.form.submit()">
+            <option value="">Any method</option>
+            @foreach (\App\Models\Order::PAYMENT_METHODS as $value => $label)
+                <option value="{{ $value }}" @selected(request('method') === $value)>{{ $label }}</option>
+            @endforeach
         </select>
         <button type="submit" class="btn-sm ghost">Filter</button>
     </form>
@@ -37,7 +44,7 @@
                         <div class="muted">{{ $order->user?->email }}</div>
                     </td>
                     <td class="muted">{{ $order->created_at->format('M j, Y H:i') }}</td>
-                    <td><span class="badge b-{{ $order->payment_status }}">{{ $order->payment_status_label }}</span></td>
+                    <td><span class="badge b-{{ $order->payment_status }}">{{ $order->payment_status_label }}</span><div class="muted" style="font-size:12px;margin-top:4px">{{ $order->payment_method_label }}</div></td>
                     <td><span class="badge b-{{ $order->status }}">{{ $order->status_label }}</span></td>
                     <td class="num" style="text-align:right">{{ price_format($order->total) }}</td>
                     <td>

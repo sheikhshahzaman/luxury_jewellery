@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\BankAccount;
+use App\Models\MetalRate;
 use App\Models\Category;
 use App\Models\ContactMessage;
 use App\Models\Coupon;
@@ -27,6 +28,7 @@ class DatabaseSeeder extends Seeder
         $products = $this->seedProducts($categories);
         $this->seedTestimonials();
         $this->seedBankAccounts();
+        self::seedMetalRates();
         $this->seedCoupons();
         $this->seedOrdersAndReviews($products);
         $this->seedNewsletter();
@@ -78,8 +80,8 @@ class DatabaseSeeder extends Seeder
     protected function seedSettings(): void
     {
         $defaults = [
-            'store_name' => 'Eluxee',
-            'store_tagline' => 'Fine jewelry handcrafted in small batches since 1999. Recycled gold, traceable stones, lifetime care.',
+            'store_name' => 'Lax Jewellers',
+            'store_tagline' => 'Fine jewelry handcrafted in small batches since 1999. Recycled gold, made to last, lifetime care.',
             'announcement' => 'Complimentary shipping on orders over $150 ✦ Easy 30 day returns',
             'currency_symbol' => '$',
             'shipping_fee' => '15',
@@ -93,7 +95,7 @@ class DatabaseSeeder extends Seeder
             'marquee_text' => 'Fine Jewelry|Handcrafted|Ethically Sourced|Recycled Gold|Since 1999',
             'banner_eyebrow' => 'Seasonal drop',
             'banner_title' => 'The Gilded Hour Collection',
-            'banner_text' => 'Warm gold tones, soft silhouettes, and stones chosen for evening light. A limited run of 200 numbered pieces.',
+            'banner_text' => 'Warm gold tones and soft silhouettes, made for evening light. A limited run of 200 numbered pieces.',
             'banner_image' => 'https://images.unsplash.com/photo-1602173574767-37ac01994b2a?w=1000&q=80',
             'banner_pill' => 'Up to 30% off',
             'categories_title' => 'Shop by category',
@@ -103,7 +105,7 @@ class DatabaseSeeder extends Seeder
             'newsletter_title' => 'Receive first access to new pieces',
             'newsletter_text' => 'Early collection previews, private offers, and care guides. One email a month, nothing more.',
             'value_1_title' => 'Ethically sourced',
-            'value_1_text' => 'Traceable stones and certified recycled 18k gold in every piece.',
+            'value_1_text' => 'Certified recycled 18k gold in every piece.',
             'value_2_title' => 'Free worldwide shipping',
             'value_2_text' => 'Insured express delivery on all orders over $150.',
             'value_3_title' => 'Lifetime warranty',
@@ -118,7 +120,7 @@ class DatabaseSeeder extends Seeder
             'gallery_images' => json_encode([
                 'https://images.unsplash.com/photo-1617038220319-276d3cfab638?w=500&q=80',
                 'https://images.unsplash.com/photo-1620656798579-1984d9e87df7?w=500&q=80',
-                'https://images.unsplash.com/photo-1600003263720-95b45a4035d5?w=500&q=80',
+                'https://images.unsplash.com/photo-1610694955371-d4a3e0ce4b52?w=500&q=80',
                 'https://images.unsplash.com/photo-1602173574767-37ac01994b2a?w=500&q=80',
                 'https://images.unsplash.com/photo-1590166223826-12dee1677420?w=500&q=80',
             ]),
@@ -137,6 +139,7 @@ class DatabaseSeeder extends Seeder
             ['name' => 'Necklaces', 'image' => 'https://images.unsplash.com/photo-1601121141461-9d6647bca1ed?w=700&q=80', 'description' => 'Pendants and chains made to be layered and kept.'],
             ['name' => 'Earrings', 'image' => 'https://images.unsplash.com/photo-1590166223826-12dee1677420?w=700&q=80', 'description' => 'Studs, hoops and sculptural pairs for every hour.'],
             ['name' => 'Bracelets', 'image' => 'https://images.unsplash.com/photo-1610694955371-d4a3e0ce4b52?w=700&q=80', 'description' => 'Cuffs and chains finished by hand in our atelier.'],
+            ...self::extraCategories(),
         ];
 
         $categories = [];
@@ -165,10 +168,10 @@ class DatabaseSeeder extends Seeder
             'photo-1605100804763-247f67b3557e', 'photo-1601121141461-9d6647bca1ed',
             'photo-1590166223826-12dee1677420', 'photo-1610694955371-d4a3e0ce4b52',
             'photo-1617038220319-276d3cfab638', 'photo-1620656798579-1984d9e87df7',
-            'photo-1600003263720-95b45a4035d5', 'photo-1602173574767-37ac01994b2a',
+            'photo-1610694955371-d4a3e0ce4b52', 'photo-1602173574767-37ac01994b2a',
         ];
 
-        $details = "Materials\n· Recycled 18k gold\n· Ethically sourced stones\n· Signed and numbered certificate\n\nCare\n· Store in the provided pouch\n· Complimentary lifetime polishing and resizing";
+        $details = "Materials\n· Recycled 18k gold\n· Polished and inspected by hand\n· Signed and numbered certificate\n\nCare\n· Store in the provided pouch\n· Complimentary lifetime polishing and resizing";
 
         $rows = [
             // name, category, price, sale, stock, tag, featured, image
@@ -210,7 +213,7 @@ class DatabaseSeeder extends Seeder
                 'tag' => $tag,
                 'is_featured' => $featured,
                 'is_active' => true,
-            ]);
+            ] + self::optionPresets($cat));
 
             // Two extra gallery images from the pool.
             foreach ([($imgIdx + 3) % count($pool), ($imgIdx + 7) % count($pool)] as $order => $poolIdx) {
@@ -224,6 +227,88 @@ class DatabaseSeeder extends Seeder
         }
 
         return $products;
+    }
+
+    /** Base PKR rates for the live rates board (public so existing databases can be given them). */
+    public static function seedMetalRates(): void
+    {
+        if (MetalRate::exists()) {
+            return;
+        }
+
+        $rows = [
+            ['gold', '1 Tola', null, 438993, 434990],
+            ['gold', '10 Gram', null, 376389, 372958],
+            ['gold', '5 Gram', null, 188183, 186469],
+            ['gold', '1 Gram', null, 37632, 37303],
+            ['silver', '10 Tola', 'QR Packaging', 72010, 67998],
+            ['silver', '10 Tola', '999', 70997, 67001],
+            ['silver', '1 KG', null, 595825, 574398],
+            ['silver', '5 Tola', 'Bar', 36752, 33494],
+            ['silver', '1 Tola', 'Bar', 7996, 6994],
+        ];
+
+        $taken = [];
+        foreach ($rows as $i => [$metal, $label, $note, $buy, $sell]) {
+            [$quantity, $unit] = MetalRate::parseSize($label);
+            $key = $taken[] = MetalRate::makeKey($metal, $quantity, $unit, $note, $taken);
+            MetalRate::create(compact('key', 'metal', 'label', 'note', 'unit', 'quantity', 'buy', 'sell') + ['sort_order' => $i]);
+        }
+    }
+
+    /** Categories added later; public so existing databases can be given them too. */
+    public static function extraCategories(): array
+    {
+        return [
+            ['name' => 'Gold piece', 'image' => 'https://images.unsplash.com/photo-1617038220319-276d3cfab638?w=700&q=80', 'description' => 'Solid gold pieces, crafted to be kept and passed on.'],
+            ['name' => 'Jewelry', 'image' => 'https://images.unsplash.com/photo-1608042314453-ae338d80c427?w=700&q=80', 'description' => 'Everyday and occasion jewelry, from delicate to statement.'],
+            ['name' => 'Chain', 'image' => 'https://images.unsplash.com/photo-1602173574767-37ac01994b2a?w=700&q=80', 'description' => 'Chains in every weight and length, to wear alone or with a pendant.'],
+        ];
+    }
+
+    /**
+     * Demo jewellery options per category (metal, size, engraving).
+     * Public so existing databases can be backfilled with the same presets.
+     */
+    public static function optionPresets(?string $category): array
+    {
+        $metals = [
+            ['name' => 'Yellow gold', 'price' => 0],
+            ['name' => 'White gold', 'price' => 0],
+            ['name' => 'Rose gold', 'price' => 40],
+        ];
+
+        return match ($category) {
+            'Rings' => [
+                'metal_options' => [...$metals, ['name' => 'Platinum', 'price' => 180]],
+                'size_options' => ['5', '5.5', '6', '6.5', '7', '7.5', '8', '8.5', '9'],
+                'size_label' => 'Ring size',
+                'engraving_enabled' => true,
+                'engraving_fee' => 25,
+            ],
+            'Necklaces' => [
+                'metal_options' => $metals,
+                'size_options' => ['16 in', '18 in', '20 in'],
+                'size_label' => 'Chain length',
+                'engraving_enabled' => true,
+                'engraving_fee' => 30,
+            ],
+            'Bracelets' => [
+                'metal_options' => $metals,
+                'size_options' => ['S', 'M', 'L'],
+                'size_label' => 'Wrist size',
+                'engraving_enabled' => true,
+                'engraving_fee' => 25,
+            ],
+            'Earrings' => [
+                'metal_options' => $metals,
+                'size_options' => null,
+                'size_label' => null,
+                'engraving_enabled' => false,
+                'engraving_fee' => 0,
+            ],
+            default => [],
+        };
     }
 
     protected function seedTestimonials(): void
@@ -243,7 +328,7 @@ class DatabaseSeeder extends Seeder
     {
         BankAccount::create([
             'bank_name' => 'Meezan Bank',
-            'account_name' => 'Eluxee Jewellery (Pvt) Ltd',
+            'account_name' => 'Lax Jewellers (Pvt) Ltd',
             'account_number' => '0101-0987654321',
             'iban' => 'PK36MEZN0001010987654321',
             'branch' => 'Main Boulevard Branch',
@@ -253,12 +338,32 @@ class DatabaseSeeder extends Seeder
 
         BankAccount::create([
             'bank_name' => 'HBL',
-            'account_name' => 'Eluxee Jewellery (Pvt) Ltd',
+            'account_name' => 'Lax Jewellers (Pvt) Ltd',
             'account_number' => '2233-4455667788',
             'iban' => 'PK80HABB0022334455667788',
             'branch' => 'Clifton Branch',
             'instructions' => 'Transfers usually verify within 2 business hours.',
             'sort_order' => 1,
+        ]);
+
+        self::seedWallets();
+    }
+
+    /** Demo JazzCash / Easypaisa wallets (public so existing databases can add them). */
+    public static function seedWallets(): void
+    {
+        BankAccount::firstOrCreate(['type' => 'jazzcash', 'account_number' => '0300-1234567'], [
+            'bank_name' => 'JazzCash',
+            'account_name' => 'Lax Jewellers',
+            'instructions' => 'Send the order total from your JazzCash app, then upload the confirmation screenshot with its transaction ID.',
+            'sort_order' => 2,
+        ]);
+
+        BankAccount::firstOrCreate(['type' => 'easypaisa', 'account_number' => '0345-7654321'], [
+            'bank_name' => 'Easypaisa',
+            'account_name' => 'Lax Jewellers',
+            'instructions' => 'Send the order total from your Easypaisa app, then upload the confirmation screenshot with its transaction ID.',
+            'sort_order' => 3,
         ]);
     }
 
@@ -352,13 +457,16 @@ class DatabaseSeeder extends Seeder
             $shipping = ($subtotal - $discount) >= 150 ? 0 : 15;
             $total = round($subtotal - $discount + $shipping, 2);
 
+            $bank = $banks->random();
             $order = Order::create([
                 'user_id' => $customer->id,
                 'status' => $status,
                 'payment_status' => $payment,
-                'bank_account_id' => $banks->random()->id,
+                'payment_method' => $bank->type,
+                'bank_account_id' => $bank->id,
                 'payment_screenshot' => $screenshot,
                 'payment_reference' => 'TRX-'.random_int(100000, 999999),
+                'payer_name' => $customer->name,
                 'payment_verified_at' => $payment === 'verified' ? $when->copy()->addHours(3) : null,
                 'payment_note' => $payment === 'rejected'
                     ? 'The transferred amount did not match the order total. Please resend a corrected receipt.'
@@ -487,7 +595,7 @@ class DatabaseSeeder extends Seeder
             imagestring($im, 5, 24, 26, 'DEMO BANK - TRANSFER CONFIRMATION', $bg);
             imagestring($im, 4, 24, 100, 'Status:    SUCCESSFUL', $ink);
             imagestring($im, 4, 24, 140, 'Amount:    (demo screenshot)', $ink);
-            imagestring($im, 4, 24, 180, 'To:        Eluxee Jewellery (Pvt) Ltd', $ink);
+            imagestring($im, 4, 24, 180, 'To:        Lax Jewellers (Pvt) Ltd', $ink);
             imagestring($im, 4, 24, 220, 'Reference: TRX-000000', $ink);
             imagestring($im, 3, 24, 300, 'This image was generated by the database seeder.', $gold);
             ob_start();

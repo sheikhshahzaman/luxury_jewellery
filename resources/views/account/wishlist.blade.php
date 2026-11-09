@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Wishlist — '.setting('store_name', 'Eluxee'))
+@section('title', 'Wishlist — '.setting('store_name', 'Lax Jewellers'))
 
 @section('content')
 <div class="container account-wrap">

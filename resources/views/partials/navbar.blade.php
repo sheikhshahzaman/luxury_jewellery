@@ -4,19 +4,36 @@
             <button class="icon-btn menu-toggle" id="menuToggle" aria-label="Open menu">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
             </button>
+            <a href="{{ route('home') }}" class="brand" aria-label="{{ setting('store_name', 'Lax Jewellers') }} — home">
+                @include('partials.brand')
+            </a>
             <ul class="nav-links">
                 <li><a href="{{ route('home') }}" @class(['active' => request()->routeIs('home')])>Home</a></li>
-                <li><a href="{{ route('shop.index') }}" @class(['active' => request()->routeIs('shop.*') || request()->routeIs('product.*')])>Shop</a></li>
+                <li><a href="{{ route('shop.index') }}" @class(['active' => (request()->routeIs('shop.*') && ! request('category')) || request()->routeIs('product.*')])>Shop</a></li>
+                @if ($navCategories->isNotEmpty())
+                    <li class="nav-dropdown" data-dropdown>
+                        <button type="button" class="nav-drop-btn @if(request('category')) active @endif" aria-expanded="false" aria-controls="categoryMenu">
+                            Categories
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                        </button>
+                        <div class="nav-menu" id="categoryMenu">
+                            @foreach ($navCategories as $navCategory)
+                                <a href="{{ route('shop.index', ['category' => $navCategory->slug]) }}" @class(['on' => request('category') === $navCategory->slug])>
+                                    <img src="{{ $navCategory->thumb_url }}" alt="" width="38" height="38">
+                                    <span class="nm-name">{{ $navCategory->name }}</span>
+                                    <span class="nm-count">{{ $navCategory->count }}</span>
+                                </a>
+                            @endforeach
+                            <a href="{{ route('shop.index') }}" class="nm-all">Shop everything</a>
+                        </div>
+                    </li>
+                @endif
+                <li><a href="{{ route('rates.index') }}" @class(['nav-rates', 'active' => request()->routeIs('rates.*')])><span class="nav-live" aria-hidden="true"></span>Live rates</a></li>
                 <li><a href="{{ route('page.offers') }}" @class(['active' => request()->routeIs('page.offers')])>Offers</a></li>
                 <li><a href="{{ route('page.about') }}" @class(['active' => request()->routeIs('page.about')])>Our Story</a></li>
                 <li><a href="{{ route('page.contact') }}" @class(['active' => request()->routeIs('page.contact')])>Contact</a></li>
             </ul>
-            <a href="{{ route('home') }}" class="brand">
-                @if (setting('logo'))
-                    <img src="{{ setting_image('logo') }}" alt="{{ setting('store_name', 'Eluxee') }}" class="brand-logo">
-                @endif
-                <span class="brand-name">{{ setting('store_name', 'Eluxee') }}</span>
-            </a>
+
             <div class="nav-actions">
                 <button class="icon-btn" id="searchToggle" aria-label="Search">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -52,6 +69,15 @@
     <div class="mobile-menu" id="mobileMenu">
         <a href="{{ route('home') }}">Home</a>
         <a href="{{ route('shop.index') }}">Shop</a>
+        @if ($navCategories->isNotEmpty())
+            <details class="mobile-cats">
+                <summary>Categories</summary>
+                @foreach ($navCategories as $navCategory)
+                    <a href="{{ route('shop.index', ['category' => $navCategory->slug]) }}">{{ $navCategory->name }} <span>{{ $navCategory->count }}</span></a>
+                @endforeach
+            </details>
+        @endif
+        <a href="{{ route('rates.index') }}">Live gold &amp; silver rates</a>
         <a href="{{ route('page.offers') }}">Offers</a>
         <a href="{{ route('page.about') }}">Our Story</a>
         <a href="{{ route('page.contact') }}">Contact</a>

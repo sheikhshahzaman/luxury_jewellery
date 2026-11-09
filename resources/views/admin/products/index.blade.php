@@ -55,7 +55,7 @@
                         <div class="actions">
                             <a href="{{ route('product.show', $product) }}" target="_blank" class="btn-sm ghost">View</a>
                             <a href="{{ route('admin.products.edit', $product) }}" class="btn-sm ghost">Edit</a>
-                            <form method="POST" action="{{ route('admin.products.destroy', $product) }}" onsubmit="return confirm('Delete “{{ $product->name }}”? Existing orders keep their line items.')">
+                            <form method="POST" action="{{ route('admin.products.destroy', $product) }}" onsubmit="return confirm({{ Js::from('Delete “'.$product->name.'”? Existing orders keep their line items.') }})">
                                 @csrf @method('DELETE')
                                 <button type="submit" class="btn-sm danger">Delete</button>
                             </form>

@@ -7,7 +7,7 @@
     @csrf
 
     @foreach ($groups as $groupName => $fields)
-        <div class="adm-panel">
+        <div class="adm-panel" id="{{ Str::slug($groupName) }}">
             <h2>{{ $groupName }}</h2>
             <div class="form-grid">
                 @foreach ($fields as $key => $meta)
@@ -22,7 +22,7 @@
                                     <img class="img-preview" src="{{ setting_image($key) }}" alt="{{ $key }}">
                                 @endif
                                 <div class="setting-image-inputs">
-                                    <input type="file" name="{{ $key }}_file" accept="image/jpeg,image/png,image/webp,image/svg+xml">
+                                    <input type="file" name="{{ $key }}_file" accept="image/jpeg,image/png,image/webp">
                                     <input type="text" name="{{ $key }}" value="{{ Str::startsWith($current, 'http') ? $current : '' }}" placeholder="…or paste an image URL">
                                     @if ($current)
                                         <label class="switch-row" style="padding:4px 0">
@@ -31,6 +31,14 @@
                                     @endif
                                 </div>
                             </div>
+                        </div>
+                    @elseif ($type === 'toggle')
+                        <div class="field full">
+                            <input type="hidden" name="{{ $key }}" value="0">
+                            <label class="switch-row" style="padding:4px 0">
+                                <input type="checkbox" name="{{ $key }}" value="1" @checked(old($key, $values[$key] ?? ($meta['default'] ?? '0')) == '1')>
+                                {{ $meta['label'] }}
+                            </label>
                         </div>
                     @elseif ($type === 'textarea')
                         <div class="field full">

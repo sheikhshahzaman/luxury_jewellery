@@ -24,46 +24,54 @@ class CartController extends Controller
     {
         abort_unless($product->is_active, 404);
 
-        $qty = max(1, (int) $request->input('qty', 1));
-
         if ($product->stock <= 0) {
             return back()->with('error', 'This piece is currently out of stock.');
         }
 
-        $already = (int) ($this->cart->raw()[$product->id] ?? 0);
-        if ($already + $qty > $product->stock) {
-            $qty = max(0, $product->stock - $already);
-            if ($qty === 0) {
-                return back()->with('error', 'You already have the maximum available quantity of this piece in your cart.');
-            }
+        // Pieces with a metal or size must be configured on the product page.
+        if ($product->requiresChoice() && ! $request->hasAny(['metal', 'size'])) {
+            return redirect()->route('product.show', $product)
+                ->with('info', 'Choose your options for '.$product->name.' first.');
         }
 
-        $this->cart->add($product, $qty);
+        $request->validate(['qty' => ['nullable', 'integer', 'min:1', 'max:99']]);
+        $options = $product->resolveOptions($request->only(['metal', 'size', 'engraving']));
+
+        $added = $this->cart->add($product, (int) $request->input('qty', 1), $options);
+
+        if ($added === 0) {
+            return back()->with('error', 'You already have the maximum available quantity of this piece in your cart.');
+        }
 
         return back()->with('success', $product->name.' added to your cart.');
     }
 
-    public function update(Request $request, Product $product): RedirectResponse
+    public function update(Request $request, string $line): RedirectResponse
     {
-        $qty = (int) $request->input('qty', 1);
+        $wanted = (int) $request->input('qty', 1);
+        $kept = $this->cart->update($line, $wanted);
 
-        if ($qty > $product->stock) {
-            $qty = $product->stock;
-            $this->cart->update($product, $qty);
-
-            return redirect()->route('cart.index')->with('error', 'Only '.$product->stock.' of this piece are available.');
+        if ($kept === null) {
+            return redirect()->route('cart.index')->with('error', 'That item is no longer in your cart.');
         }
 
-        $this->cart->update($product, $qty);
+        if ($kept < $wanted) {
+            return redirect()->route('cart.index')->with('error', $kept > 0
+                ? 'Quantity set to '.$kept.' — that is all we have in stock.'
+                : 'This piece is no longer available and was removed.');
+        }
 
         return redirect()->route('cart.index');
     }
 
-    public function remove(Product $product): RedirectResponse
+    public function remove(string $line): RedirectResponse
     {
-        $this->cart->remove($product->id);
+        $raw = $this->cart->line($line);
+        $this->cart->remove($line);
 
-        return redirect()->route('cart.index')->with('success', $product->name.' removed from your cart.');
+        $name = $raw ? Product::find($raw['product_id'])?->name : null;
+
+        return redirect()->route('cart.index')->with('success', ($name ?? 'Item').' removed from your cart.');
     }
 
     public function applyCoupon(Request $request): RedirectResponse

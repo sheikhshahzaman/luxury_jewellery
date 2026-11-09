@@ -13,7 +13,7 @@ class HomeController extends Controller
     {
         $categories = Category::active()->ordered()
             ->withCount(['products as count' => fn ($q) => $q->where('is_active', true)])
-            ->take(4)
+            ->take(8)
             ->get();
 
         $products = Product::active()->featured()->with('category')->latest()->take(6)->get();
@@ -23,7 +23,7 @@ class HomeController extends Controller
             );
         }
 
-        $testimonials = Testimonial::active()->ordered()->take(3)->get();
+        $testimonials = Testimonial::active()->ordered()->take(12)->get();
 
         $gallery = collect(json_decode(setting('gallery_images', '[]'), true) ?: [])
             ->filter()->take(5)->values()->all();

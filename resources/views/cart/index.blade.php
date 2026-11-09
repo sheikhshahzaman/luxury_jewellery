@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Your cart — '.setting('store_name', 'Eluxee'))
+@section('title', 'Your cart — '.setting('store_name', 'Lax Jewellers'))
 
 @section('content')
 <div class="page-strip">
@@ -30,8 +30,11 @@
                             @if ($product->category)
                                 <div class="cl-cat">{{ $product->category->name }}</div>
                             @endif
-                            <div class="cl-price">{{ price_format($product->current_price) }} each</div>
-                            <form method="POST" action="{{ route('cart.update', $product) }}" style="margin-top:12px">
+                            @if ($line['option_lines'])
+                                <div class="opt-lines">@foreach ($line['option_lines'] as $opt)<span>{{ $opt }}</span>@endforeach</div>
+                            @endif
+                            <div class="cl-price">{{ price_format($line['unit_price']) }} each</div>
+                            <form method="POST" action="{{ route('cart.update', $line['key']) }}" style="margin-top:12px">
                                 @csrf
                                 <div class="qty-box" data-autosubmit="1">
                                     <button type="button" data-step="-1" aria-label="Decrease">−</button>
@@ -42,7 +45,7 @@
                         </div>
                         <div class="cl-right">
                             <span class="cl-total">{{ price_format($line['line_total']) }}</span>
-                            <form method="POST" action="{{ route('cart.remove', $product) }}">
+                            <form method="POST" action="{{ route('cart.remove', $line['key']) }}">
                                 @csrf
                                 <button type="submit" class="cl-remove">Remove</button>
                             </form>
@@ -89,7 +92,7 @@
                 @if ($shipping > 0 && $freeMin > 0)
                     <div class="free-ship-note">Add {{ price_format($freeMin - $subtotal) }} more for free shipping</div>
                 @endif
-                <div class="free-ship-note">Payment by direct bank transfer</div>
+                <div class="free-ship-note">{{ payment_methods_summary() }}</div>
             </aside>
         </div>
     @endif

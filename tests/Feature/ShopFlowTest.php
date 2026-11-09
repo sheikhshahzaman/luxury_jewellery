@@ -10,6 +10,7 @@ use App\Models\Product;
 use App\Models\Setting;
 use App\Models\Testimonial;
 use App\Models\User;
+use App\Services\CartService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -131,8 +132,11 @@ class ShopFlowTest extends TestCase
         $this->post('/cart/add/'.$this->product->slug, ['qty' => 2])->assertRedirect();
         $this->get('/cart')->assertSee('Test Ring');
 
-        $this->post('/cart/update/'.$this->product->slug, ['qty' => 3])->assertRedirect();
-        $this->post('/cart/remove/'.$this->product->slug)->assertRedirect();
+        // Cart lines are addressed by line key (product + chosen options).
+        $line = CartService::lineKey($this->product->id, []);
+        $this->post('/cart/update/'.$line, ['qty' => 3])->assertRedirect();
+        $this->assertSame(3, cart_count());
+        $this->post('/cart/remove/'.$line)->assertRedirect();
         $this->get('/cart')->assertSee('Your cart is empty');
     }
 
@@ -179,7 +183,8 @@ class ShopFlowTest extends TestCase
         $this->get('/checkout')->assertOk()
             ->assertSee('Test Bank')
             ->assertSee('123456')
-            ->assertSee('Upload payment screenshot');
+            ->assertSee('Payment receipt')
+            ->assertSee('Cash on delivery');
     }
 
     public function test_checkout_requires_screenshot(): void
@@ -207,7 +212,7 @@ class ShopFlowTest extends TestCase
         $this->assertNotNull($order);
         $response->assertRedirect(route('checkout.confirmation', $order));
 
-        $this->assertStringStartsWith('ELX-', $order->order_number);
+        $this->assertStringStartsWith('LAX-', $order->order_number);
         $this->assertSame('pending', $order->status);
         $this->assertSame('submitted', $order->payment_status);
         $this->assertSame($this->bank->id, $order->bank_account_id);
@@ -298,6 +303,10 @@ class ShopFlowTest extends TestCase
         $this->get('/account/orders/'.$order->id)->assertSee('Amount mismatch');
         $this->post('/account/orders/'.$order->id.'/payment', [
             'payment_screenshot' => UploadedFile::fake()->image('new-receipt.png'),
+        ])->assertSessionHasErrors(['payment_reference', 'payer_name']);
+        $this->post('/account/orders/'.$order->id.'/payment', [
+            'payment_screenshot' => UploadedFile::fake()->image('new-receipt.png'),
+            'payment_reference' => 'TRX-2', 'payer_name' => 'Customer',
         ])->assertRedirect();
 
         $order->refresh();
@@ -310,6 +319,11 @@ class ShopFlowTest extends TestCase
         $order = $this->placeOrder(qty: 2); // stock 10 -> 8
 
         $this->actingAs($this->admin);
+        // A bank transfer order can't ship before its payment is verified.
+        $this->post('/admin/orders/'.$order->id.'/status', ['status' => 'shipped'])->assertSessionHas('error');
+        $this->assertSame('pending', $order->fresh()->status);
+
+        $this->post('/admin/orders/'.$order->id.'/verify-payment')->assertRedirect(); // -> processing
         $this->post('/admin/orders/'.$order->id.'/status', ['status' => 'shipped', 'tracking_number' => 'TRACK9'])
             ->assertRedirect();
         $order->refresh();
@@ -509,7 +523,8 @@ class ShopFlowTest extends TestCase
         return [
             'ship_name' => 'Customer', 'ship_phone' => '0300', 'ship_address' => 'Street 1',
             'ship_city' => 'Lahore', 'ship_country' => 'Pakistan',
-            'bank_account_id' => $this->bank->id,
+            'payment_method' => 'bank', 'bank_account_id' => $this->bank->id,
+            'payment_reference' => 'TRX-1', 'payer_name' => 'Customer',
         ];
     }
 

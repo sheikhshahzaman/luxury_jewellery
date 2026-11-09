@@ -71,6 +71,33 @@
     </div>
 
     <div class="adm-panel">
+        <h2>Jewellery options</h2>
+        <p class="muted" style="font-size:13px;margin:-6px 0 16px">Leave empty for pieces without choices. When a metal or size is set, shoppers pick it on the product page before adding to cart.</p>
+        <div class="form-grid">
+            <div class="field full">
+                <label for="metal_options">Metals — one per line: <i>name | extra price</i></label>
+                <textarea id="metal_options" name="metal_options" style="min-height:96px" placeholder="Yellow gold | 0&#10;White gold | 0&#10;Rose gold | 20&#10;Sterling silver | -60">{{ old('metal_options', collect($product->metals())->map(fn ($m) => $m['name'].' | '.rtrim(rtrim(number_format($m['price'], 2, '.', ''), '0'), '.'))->implode("\n")) }}</textarea>
+            </div>
+            <div class="field">
+                <label for="size_label">Size name</label>
+                <input id="size_label" type="text" name="size_label" value="{{ old('size_label', $product->size_label) }}" placeholder="Ring size, Chain length…">
+            </div>
+            <div class="field">
+                <label for="size_options">Sizes — comma separated</label>
+                <input id="size_options" type="text" name="size_options" value="{{ old('size_options', implode(', ', $product->sizes())) }}" placeholder="5, 6, 7, 8, 9">
+            </div>
+            <div class="field">
+                <label for="engraving_fee">Engraving fee</label>
+                <input id="engraving_fee" type="number" step="0.01" min="0" name="engraving_fee" value="{{ old('engraving_fee', $product->engraving_fee ?? 0) }}">
+            </div>
+        </div>
+        <label class="switch-row">
+            <input type="checkbox" name="engraving_enabled" value="1" @checked(old('engraving_enabled', $product->engraving_enabled))>
+            Offer personal engraving (up to {{ \App\Models\Product::ENGRAVING_MAX }} characters)
+        </label>
+    </div>
+
+    <div class="adm-panel">
         <h2>Images</h2>
         @if ($product->image)
             <img class="img-preview" src="{{ $product->image_url }}" alt="Current image">
@@ -92,10 +119,8 @@
                 @foreach ($product->images as $image)
                     <div class="g-item">
                         <img src="{{ $image->url }}" alt="">
-                        <form method="POST" action="{{ route('admin.products.images.destroy', $image) }}" onsubmit="return confirm('Remove this image?')">
-                            @csrf @method('DELETE')
-                            <button type="submit" aria-label="Remove image">×</button>
-                        </form>
+                        {{-- Submits the standalone form below (forms can't be nested). --}}
+                        <button type="submit" form="delete-image-{{ $image->id }}" aria-label="Remove image">×</button>
                     </div>
                 @endforeach
             </div>
@@ -112,4 +137,12 @@
         <a href="{{ route('admin.products.index') }}" class="btn-sm ghost">Cancel</a>
     </div>
 </form>
+
+@if ($product->exists)
+    @foreach ($product->images as $image)
+        <form id="delete-image-{{ $image->id }}" method="POST" action="{{ route('admin.products.images.destroy', $image) }}" onsubmit="return confirm('Remove this image?')" hidden>
+            @csrf @method('DELETE')
+        </form>
+    @endforeach
+@endif
 @endsection

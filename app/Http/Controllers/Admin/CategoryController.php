@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Category;
+use App\Support\Slug;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -27,7 +28,7 @@ class CategoryController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $this->validated($request);
-        $data['slug'] = $this->uniqueSlug($data['name']);
+        $data['slug'] = Slug::unique(Category::class, $data['name']);
 
         if ($request->hasFile('image_file')) {
             $data['image'] = $request->file('image_file')->store('categories', 'public');
@@ -48,14 +49,16 @@ class CategoryController extends Controller
         $data = $this->validated($request);
 
         if ($data['name'] !== $category->name) {
-            $data['slug'] = $this->uniqueSlug($data['name'], $category->id);
+            $data['slug'] = Slug::unique(Category::class, $data['name'], $category->id);
         }
 
         if ($request->hasFile('image_file')) {
-            if ($category->image && ! Str::startsWith($category->image, ['http://', 'https://'])) {
-                Storage::disk('public')->delete($category->image);
-            }
             $data['image'] = $request->file('image_file')->store('categories', 'public');
+        }
+
+        // Image replaced (by an upload or a URL): drop the old file.
+        if (isset($data['image']) && $data['image'] !== $category->image) {
+            $this->deleteLocalFile($category->image);
         }
 
         $category->update($data);
@@ -69,6 +72,7 @@ class CategoryController extends Controller
             return back()->with('error', 'This category still has products. Move or delete them first.');
         }
 
+        $this->deleteLocalFile($category->image);
         $category->delete();
 
         return redirect()->route('admin.categories.index')->with('success', 'Category deleted.');
@@ -96,16 +100,10 @@ class CategoryController extends Controller
         return $data;
     }
 
-    protected function uniqueSlug(string $name, ?int $ignoreId = null): string
+    protected function deleteLocalFile(?string $path): void
     {
-        $base = Str::slug($name);
-        $slug = $base;
-        $n = 2;
-
-        while (Category::where('slug', $slug)->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))->exists()) {
-            $slug = $base.'-'.$n++;
+        if ($path && ! Str::startsWith($path, ['http://', 'https://'])) {
+            Storage::disk('public')->delete($path);
         }
-
-        return $slug;
     }
 }

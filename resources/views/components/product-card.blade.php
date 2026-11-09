@@ -27,7 +27,9 @@
             </a>
         @endauth
 
-        @if ($product->in_stock)
+        @if ($product->in_stock && $product->requiresChoice())
+            <a href="{{ route('product.show', $product) }}" class="quick-add">Choose options</a>
+        @elseif ($product->in_stock)
             <form method="POST" action="{{ route('cart.add', $product) }}">
                 @csrf
                 <button type="submit" class="quick-add">Add to cart</button>
