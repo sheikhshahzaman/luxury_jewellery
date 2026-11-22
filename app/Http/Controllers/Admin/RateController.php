@@ -18,9 +18,15 @@ use RuntimeException;
 
 class RateController extends Controller
 {
-    public function index(SpotRates $spot): View
+    public function index(SpotRates $spot, LiveRates $live): View
     {
+        // Rupees per gram at spot today, for the auto-price preview beside each margin.
+        // (Asked for a tonne so the rounding to whole rupees doesn't show in the per-gram figure.)
+        $perGram = collect(MetalRate::INSTRUMENT)->map(fn ($instrument, $metal) => $live->autoPrice($metal, 1e6, 0, 0))
+            ->map(fn ($p) => $p ? ['buy' => $p['buy'] / 1e6, 'sell' => $p['sell'] / 1e6] : null);
+
         return view('admin.rates', [
+            'perGram' => $perGram,
             'rates' => MetalRate::ordered()->with('editor')->get()->groupBy('metal'),
             'changes' => MetalRateChange::with('user')->latest('id')->limit(15)->get(),
             'spot' => $spot->current(),
@@ -30,10 +36,11 @@ class RateController extends Controller
     }
 
     /**
-     * Save the buy/sell prices. Each changed price is written together with
-     * its audit record; the spot-rate fetch never writes here.
+     * Save the price board. A manual item takes the typed buy/sell; an auto
+     * item takes its margins and is priced from spot from then on. Each change
+     * is written together with its audit record; the spot fetch never writes here.
      */
-    public function update(Request $request): RedirectResponse
+    public function update(Request $request, LiveRates $live): RedirectResponse
     {
         $data = $request->validate([
             'rows' => ['array'],
@@ -43,8 +50,12 @@ class RateController extends Controller
             'rows.*.note' => ['nullable', 'string', 'max:60'],
             'rows.*.unit' => ['required', Rule::in(array_keys(MetalRate::UNITS))],
             'rows.*.quantity' => ['required', 'numeric', 'gt:0', 'max:100000'],
-            'rows.*.buy' => ['required', 'numeric', 'min:0', 'max:100000000'],
-            'rows.*.sell' => ['required', 'numeric', 'min:0', 'max:100000000'],
+            'rows.*.pricing' => ['nullable', Rule::in(array_keys(MetalRate::PRICING))],
+            'rows.*.buy_margin' => ['nullable', 'numeric', 'min:-50', 'max:200'],
+            'rows.*.sell_margin' => ['nullable', 'numeric', 'min:-50', 'max:200', 'lte:rows.*.buy_margin'],
+            // An auto item doesn't need typed prices; a manual one does.
+            'rows.*.buy' => ['exclude_if:rows.*.pricing,auto', 'required', 'numeric', 'min:0', 'max:100000000'],
+            'rows.*.sell' => ['exclude_if:rows.*.pricing,auto', 'required', 'numeric', 'min:0', 'max:100000000'],
             'rows.*.sort_order' => ['nullable', 'integer', 'min:0'],
             'rows.*.is_active' => ['nullable', 'boolean'],
             'rates_note' => ['nullable', 'string', 'max:300'],
@@ -55,6 +66,7 @@ class RateController extends Controller
         ], [
             'rates_shuffle_pkr_max.gte' => 'The largest move must be at least the smallest move.',
             'rows.*.label.required' => 'Every row needs a size, e.g. "1 Tola".',
+            'rows.*.sell_margin.lte' => 'The sell margin can\'t be above the buy margin, or you would pay more than you charge.',
             'rows.*.key.regex' => 'Keys use lowercase letters, numbers and underscores only, e.g. silver_10_tola_qr.',
         ]);
 
@@ -88,23 +100,41 @@ class RateController extends Controller
         $userId = $request->user()->id;
         $changed = 0;
 
-        DB::transaction(function () use ($rows, $existing, $userId, &$changed) {
+        DB::transaction(function () use ($rows, $existing, $userId, $live, &$changed) {
             foreach ($rows as $id => $row) {
+                $rate = is_numeric($id) ? $existing[$id] : new MetalRate(['key' => $row['key']]);
+                $before = $rate->exists ? ['buy' => (float) $rate->buy, 'sell' => (float) $rate->sell] : null;
+
+                $auto = ($row['pricing'] ?? $rate->pricing) === 'auto';
+                $buyMargin = $auto ? (float) ($row['buy_margin'] ?? $rate->buy_margin) : (float) $rate->buy_margin;
+                $sellMargin = $auto ? (float) ($row['sell_margin'] ?? $rate->sell_margin) : (float) $rate->sell_margin;
+
+                if ($auto) {
+                    // Recorded only when the item is switched to auto or its margins change;
+                    // the saved buy/sell is the price that gave, kept as the fallback.
+                    $priceChanged = ! $rate->isAuto() || $buyMargin != (float) $rate->buy_margin || $sellMargin != (float) $rate->sell_margin
+                        || $row['unit'] !== $rate->unit || (float) $row['quantity'] != (float) $rate->quantity;
+                    $price = $priceChanged ? $live->autoPrice($row['metal'], MetalRate::gramsFor($row['unit'], (float) $row['quantity']), $buyMargin, $sellMargin) : null;
+                    $row['buy'] = $price['buy'] ?? $before['buy'] ?? 0;
+                    $row['sell'] = $price['sell'] ?? $before['sell'] ?? 0;
+                } else {
+                    $priceChanged = ! $before || $rate->isAuto() || $before['buy'] != (float) $row['buy'] || $before['sell'] != (float) $row['sell'];
+                }
+
                 $attributes = [
                     'metal' => $row['metal'],
                     'label' => $row['label'],
                     'note' => $row['note'] ?? null,
                     'unit' => $row['unit'],
                     'quantity' => $row['quantity'],
+                    'pricing' => $auto ? 'auto' : 'manual',
+                    'buy_margin' => $buyMargin,
+                    'sell_margin' => $sellMargin,
                     'buy' => $row['buy'],
                     'sell' => $row['sell'],
                     'sort_order' => (int) ($row['sort_order'] ?? 0),
                     'is_active' => (bool) ($row['is_active'] ?? false),
                 ];
-
-                $rate = is_numeric($id) ? $existing[$id] : new MetalRate(['key' => $row['key']]);
-                $before = $rate->exists ? ['buy' => (float) $rate->buy, 'sell' => (float) $rate->sell] : null;
-                $priceChanged = ! $before || $before['buy'] != (float) $row['buy'] || $before['sell'] != (float) $row['sell'];
 
                 $rate->fill($attributes);
                 if ($priceChanged) {
@@ -170,7 +200,7 @@ class RateController extends Controller
 
         return back()->with('success', $manual
             ? 'Manual spot rates saved and shown on the website. Automatic fetching is paused.'
-            : 'Spot rates are automatic again — they update every '.config('rates.fetch_every_minutes').' minutes.');
+            : 'Spot rates are automatic again — they update '.rates_every().'.');
     }
 
     /** Fetch spot rates right now (server-side). Automatic mode only, so typed values aren't overtaken. */
@@ -180,7 +210,7 @@ class RateController extends Controller
             return back()->with('error', 'Spot rates are on manual. Switch to automatic to fetch from the provider.');
         }
 
-        ['saved' => $saved, 'failed' => $failed] = $spot->fetch();
+        ['saved' => $saved, 'failed' => $failed] = $spot->fetch(freshFx: true);
 
         if (! $saved) {
             return back()->with('error', 'Could not fetch spot rates; the last good values are still shown. '.collect($failed)->map(fn ($m, $i) => "$i: $m")->implode('; '));

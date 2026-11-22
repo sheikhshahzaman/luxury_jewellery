@@ -10,12 +10,13 @@
     ];
     $fmt = fn ($v) => $v === null ? '—' : number_format((float) $v, 2);
     $when = fn ($iso) => $iso ? \Illuminate\Support\Carbon::parse($iso)->timezone(config('app.timezone')) : null;
-    $provider = ['gold_api' => 'gold-api.com', 'goldapi_io' => 'goldapi.io'][config('rates.provider')] ?? config('rates.provider');
+    $names = ['kitco' => 'Kitco', 'gold_api' => 'gold-api.com', 'goldapi_io' => 'goldapi.io'];
+    $provider = collect(config('rates.providers'))->map(fn ($p) => $names[$p] ?? $p)->implode(', then ');
 @endphp
 
 @section('content')
 <div class="adm-toolbar">
-    <span style="color:var(--moss);font-size:13.5px">Spot prices come from the market; your buy and sell prices are only ever what you save here.</span>
+    <span style="color:var(--moss);font-size:13.5px">Spot prices come from the market. Each buy and sell price is either <b>Auto</b> (follows spot, plus your margin) or <b>Manual</b> (exactly what you type).</span>
     <a href="{{ route('rates.index') }}" target="_blank" class="btn-sm ghost">View rates page ↗</a>
 </div>
 
@@ -28,7 +29,7 @@
         <div class="spot-mode" role="radiogroup" aria-label="Where spot rates come from">
             <label class="mode-opt">
                 <input type="radio" name="spot_mode" value="auto" @checked(old('spot_mode', $mode) === 'auto')>
-                <span><b>Automatic</b> Fetched from {{ $provider }} every {{ config('rates.fetch_every_minutes') }} minutes</span>
+                <span><b>Automatic</b> Fetched from {{ $provider }} {{ rates_every() }}</span>
             </label>
             <label class="mode-opt">
                 <input type="radio" name="spot_mode" value="manual" @checked(old('spot_mode', $mode) === 'manual')>
@@ -99,11 +100,12 @@
             <div class="adm-table-wrap" style="border:none">
                 <table class="adm-table rates-edit" data-metal="{{ $metal }}">
                     <thead>
-                        <tr><th>Size</th><th>Note</th><th>Qty</th><th>Unit</th><th>Buy (Rs)</th><th>Sell (Rs)</th><th>Order</th><th>Shown</th><th></th></tr>
+                        <tr><th>Size</th><th>Note</th><th>Qty</th><th>Unit</th><th>Pricing</th><th>Buy</th><th>Sell</th><th>Order</th><th>Shown</th><th></th></tr>
                     </thead>
                     <tbody>
                         @foreach ($rates->get($metal, collect()) as $rate)
-                            <tr>
+                            @php $pricing = old("rows.$rate->id.pricing", $rate->pricing); @endphp
+                            <tr data-rate-row data-metal="{{ $metal }}" @class(['is-auto' => $pricing === 'auto'])>
                                 <td>
                                     <input type="hidden" name="rows[{{ $rate->id }}][metal]" value="{{ $metal }}">
                                     <input type="text" name="rows[{{ $rate->id }}][label]" value="{{ old("rows.$rate->id.label", $rate->label) }}" required placeholder="1 Tola">
@@ -118,10 +120,27 @@
                                         @endforeach
                                     </select>
                                 </td>
-                                <td><input type="number" step="1" min="0" name="rows[{{ $rate->id }}][buy]" value="{{ old("rows.$rate->id.buy", (int) $rate->buy) }}" required></td>
+                                <td style="width:110px">
+                                    <select name="rows[{{ $rate->id }}][pricing]" data-pricing aria-label="Pricing">
+                                        @foreach (\App\Models\MetalRate::PRICING as $value => $name)
+                                            <option value="{{ $value }}" @selected($pricing === $value)>{{ $name }}</option>
+                                        @endforeach
+                                    </select>
+                                </td>
                                 <td>
-                                    <input type="number" step="1" min="0" name="rows[{{ $rate->id }}][sell]" value="{{ old("rows.$rate->id.sell", (int) $rate->sell) }}" required>
-                                    <small class="rate-meta">{{ $rate->updated_at?->diffForHumans() }}@if ($rate->editor) · {{ $rate->editor->name }}@endif</small>
+                                    <input class="manual-price" type="number" step="1" min="0" name="rows[{{ $rate->id }}][buy]" value="{{ old("rows.$rate->id.buy", (int) $rate->buy) }}" required aria-label="Buy price in rupees">
+                                    <div class="auto-price">
+                                        <input type="number" step="0.001" min="-50" max="200" name="rows[{{ $rate->id }}][buy_margin]" value="{{ old("rows.$rate->id.buy_margin", $rate->buy_margin + 0) }}" data-margin="buy" aria-label="Buy margin, percent over spot">
+                                        <small class="rate-meta">% over spot = <b data-preview="buy">—</b></small>
+                                    </div>
+                                </td>
+                                <td>
+                                    <input class="manual-price" type="number" step="1" min="0" name="rows[{{ $rate->id }}][sell]" value="{{ old("rows.$rate->id.sell", (int) $rate->sell) }}" required aria-label="Sell price in rupees">
+                                    <div class="auto-price">
+                                        <input type="number" step="0.001" min="-50" max="200" name="rows[{{ $rate->id }}][sell_margin]" value="{{ old("rows.$rate->id.sell_margin", $rate->sell_margin + 0) }}" data-margin="sell" aria-label="Sell margin, percent over spot">
+                                        <small class="rate-meta">% over spot = <b data-preview="sell">—</b></small>
+                                    </div>
+                                    <small class="rate-meta manual-price">{{ $rate->updated_at?->diffForHumans() }}@if ($rate->editor) · {{ $rate->editor->name }}@endif</small>
                                 </td>
                                 <td style="width:80px"><input type="number" min="0" name="rows[{{ $rate->id }}][sort_order]" value="{{ $rate->sort_order }}"></td>
                                 <td style="width:70px"><input type="hidden" name="rows[{{ $rate->id }}][is_active]" value="0"><input type="checkbox" name="rows[{{ $rate->id }}][is_active]" value="1" @checked($rate->is_active) aria-label="Shown on the rates page"></td>
@@ -200,7 +219,7 @@
 @endforeach
 
 <template id="rateRowTemplate">
-    <tr>
+    <tr data-rate-row data-metal="__METAL__">
         <td>
             <input type="hidden" name="rows[__KEY__][metal]" value="__METAL__">
             <input type="text" name="rows[__KEY__][label]" required placeholder="1 Tola">
@@ -215,8 +234,27 @@
                 @endforeach
             </select>
         </td>
-        <td><input type="number" step="1" min="0" name="rows[__KEY__][buy]" required></td>
-        <td><input type="number" step="1" min="0" name="rows[__KEY__][sell]" required></td>
+        <td style="width:110px">
+            <select name="rows[__KEY__][pricing]" data-pricing aria-label="Pricing">
+                @foreach (\App\Models\MetalRate::PRICING as $value => $name)
+                    <option value="{{ $value }}">{{ $name }}</option>
+                @endforeach
+            </select>
+        </td>
+        <td>
+            <input class="manual-price" type="number" step="1" min="0" name="rows[__KEY__][buy]" required aria-label="Buy price in rupees">
+            <div class="auto-price">
+                <input type="number" step="0.001" min="-50" max="200" name="rows[__KEY__][buy_margin]" value="0" data-margin="buy" aria-label="Buy margin, percent over spot">
+                <small class="rate-meta">% over spot = <b data-preview="buy">—</b></small>
+            </div>
+        </td>
+        <td>
+            <input class="manual-price" type="number" step="1" min="0" name="rows[__KEY__][sell]" required aria-label="Sell price in rupees">
+            <div class="auto-price">
+                <input type="number" step="0.001" min="-50" max="200" name="rows[__KEY__][sell_margin]" value="0" data-margin="sell" aria-label="Sell margin, percent over spot">
+                <small class="rate-meta">% over spot = <b data-preview="sell">—</b></small>
+            </div>
+        </td>
         <td style="width:80px"><input type="number" min="0" name="rows[__KEY__][sort_order]" value="99"></td>
         <td style="width:70px"><input type="hidden" name="rows[__KEY__][is_active]" value="0"><input type="checkbox" name="rows[__KEY__][is_active]" value="1" checked aria-label="Shown on the rates page"></td>
         <td style="text-align:right"><button type="button" class="btn-sm ghost" data-remove-new>Remove</button></td>
@@ -229,10 +267,36 @@
     (() => {
         const tpl = document.getElementById('rateRowTemplate').innerHTML;
         let n = 0;
+
+        // Auto items: show the margins and what they give at today's spot; manual items: the typed prices.
+        const perGram = @json($perGram);
+        const grams = { tola: {{ config('rates.grams_per_tola') }}, gram: 1, kg: 1000, oz: {{ config('rates.grams_per_troy_ounce') }} };
+        function syncRow(tr) {
+            const auto = tr.querySelector('[data-pricing]').value === 'auto';
+            tr.classList.toggle('is-auto', auto);
+            // Hidden prices aren't required (and aren't sent), so the form still submits.
+            tr.querySelectorAll('input.manual-price').forEach(el => { el.disabled = auto; });
+            tr.querySelectorAll('[data-margin]').forEach(el => { el.disabled = !auto; });
+            const rate = perGram[tr.dataset.metal];
+            const weight = (parseFloat(tr.querySelector('[name$="[quantity]"]').value) || 0) * (grams[tr.querySelector('[name$="[unit]"]').value] || 0);
+            ['buy', 'sell'].forEach(side => {
+                const margin = parseFloat(tr.querySelector(`[data-margin="${side}"]`).value) || 0;
+                tr.querySelector(`[data-preview="${side}"]`).textContent = rate && weight
+                    ? 'Rs ' + Math.round(rate[side] * weight * (1 + margin / 100)).toLocaleString('en-US')
+                    : 'no spot yet';
+            });
+        }
+        document.querySelectorAll('[data-rate-row]').forEach(syncRow);
+        const ratesForm = document.getElementById('ratesForm');
+        ['input', 'change'].forEach(type => ratesForm.addEventListener(type, e => {
+            const tr = e.target.closest('[data-rate-row]');
+            if (tr) syncRow(tr);
+        }));
         document.querySelectorAll('[data-add-rate]').forEach(btn => btn.addEventListener('click', () => {
             const metal = btn.dataset.addRate;
             const body = document.querySelector(`.rates-edit[data-metal="${metal}"] tbody`);
             body.insertAdjacentHTML('beforeend', tpl.replaceAll('__KEY__', 'new-' + (++n)).replaceAll('__METAL__', metal));
+            syncRow(body.lastElementChild);
             body.lastElementChild.querySelector('input[type=text]').focus();
         }));
         document.addEventListener('click', e => {
@@ -254,11 +318,16 @@
 
 @push('styles')
 <style>
-    .rates-edit input[type=text],.rates-edit input[type=number],.rates-edit select,.spot-table input{width:100%;min-width:90px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--ivory);font:inherit}
+    #ratesForm{max-width:1180px}
+    .rates-edit th,.rates-edit td{padding-left:8px;padding-right:8px}
+    .rates-edit input[type=text],.rates-edit input[type=number],.rates-edit select,.spot-table input{width:100%;min-width:64px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--ivory);font:inherit}
     .rates-edit input:focus,.rates-edit select:focus,.spot-table input:focus{outline:none;border-color:var(--champagne)}
     .rate-key{display:inline-block;margin-top:5px;font-size:11.5px;color:var(--moss);background:rgba(30,41,33,.06);padding:2px 6px;border-radius:6px}
     .rates-edit .rate-key-input{margin-top:6px;font-size:12px;padding:6px 9px}
     .rate-meta{display:block;margin-top:5px;font-size:11.5px;color:var(--moss);white-space:nowrap}
+    .rate-meta b{font-weight:500;color:var(--forest)}
+    .rates-edit .auto-price,.rates-edit tr.is-auto .manual-price{display:none}
+    .rates-edit tr.is-auto .auto-price{display:block}
     .spot-mode{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
     .mode-opt{display:flex;gap:10px;align-items:flex-start;padding:14px 16px;border:1px solid var(--line);border-radius:14px;cursor:pointer}
     .mode-opt:has(input:checked){border-color:var(--champagne);background:rgba(195,165,114,.08)}

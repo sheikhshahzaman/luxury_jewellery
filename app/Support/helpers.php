@@ -197,3 +197,13 @@ if (! function_exists('hero_frames')) {
         return $sets;
     }
 }
+
+if (! function_exists('rates_every')) {
+    /** "every minute" or "every 5 minutes": how often spot rates are fetched. */
+    function rates_every(): string
+    {
+        $minutes = max(1, (int) config('rates.fetch_every_minutes', 1));
+
+        return $minutes === 1 ? 'every minute' : "every {$minutes} minutes";
+    }
+}

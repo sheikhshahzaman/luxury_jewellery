@@ -140,6 +140,17 @@
   // The server renders its own (UTC) time; show the visitor's local time straight away.
   stamp(updated?.getAttribute('datetime'));
 
+  // Each board's "updated" time: the newest of its prices, in the visitor's local time.
+  const stampBoards = prices => {
+    root.querySelectorAll('[data-board-updated]').forEach(el => {
+      const times = (prices || []).filter(r => r.metal === el.dataset.boardUpdated && r.updated_at).map(r => Date.parse(r.updated_at));
+      if (!times.length) return;
+      const at = new Date(Math.max(...times));
+      el.textContent = 'updated ' + at.toLocaleDateString([], { day: 'numeric', month: 'short' }) + ', '
+        + at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    });
+  };
+
   // ---------------------------------------------------------------------
   // Apply each new snapshot
   // ---------------------------------------------------------------------
@@ -165,6 +176,8 @@
       if (s.pkr_per_tola) card.querySelector('[data-pkr]').textContent = `${fmtRs(s.pkr_per_tola)} / tola · ${fmtRs(s.pkr_per_gram)} / gram`;
       drawSpark(card.querySelector('[data-spark]'), s.history, false);
     });
+
+    stampBoards(data.prices);
 
     (data.prices || []).forEach(row => {
       const tr = root.querySelector(`[data-row="${row.key}"]`);

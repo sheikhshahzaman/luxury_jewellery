@@ -20,7 +20,6 @@
     $local = fn ($iso) => $iso ? \Illuminate\Support\Carbon::parse($iso)->timezone(config('app.timezone')) : null;
     $boards = collect($snapshot['prices'])->groupBy('metal');
     $spotAt = $local($snapshot['spot']['updated_at']);
-    $everyMinutes = (int) config('rates.fetch_every_minutes');
 @endphp
 
 @section('content')
@@ -33,7 +32,7 @@
                 <div>
                     <p class="rh-kicker"><span class="live-dot" aria-hidden="true"></span>Live spot prices <span>per troy ounce</span></p>
                     <h1 class="display" id="rates-title">Gold &amp; silver rates today</h1>
-                    <p class="rh-sub">International spot prices in dollars{{ $snapshot['spot']['mode'] === 'auto' ? ', updated every '.$everyMinutes.' minutes' : '' }}, and our own buying and selling rates in rupees.</p>
+                    <p class="rh-sub">International spot prices in dollars{{ $snapshot['spot']['mode'] === 'auto' ? ', updated '.rates_every() : '' }}, and our own buying and selling rates in rupees.</p>
                 </div>
                 <div class="rh-clock" aria-live="off">
                     <svg class="tick-ring" viewBox="0 0 44 44" aria-hidden="true">

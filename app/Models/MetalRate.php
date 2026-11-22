@@ -11,7 +11,11 @@ use Illuminate\Support\Str;
 
 /**
  * One of the store's own buy/sell prices (e.g. "Silver — 10 Tola (QR Packaging)").
- * Set only in Admin; the spot-rate fetch never touches these.
+ *
+ * A "manual" item shows exactly the buy/sell typed in Admin. An "auto" item is
+ * worked out from spot each time it is shown (LiveRates), using its weight and
+ * its buy/sell margins; its stored buy/sell are only the fallback for when
+ * there is no spot price or dollar rate. The spot fetch never writes here.
  */
 class MetalRate extends Model
 {
@@ -27,12 +31,24 @@ class MetalRate extends Model
         'oz' => 'Oz',
     ];
 
-    protected $fillable = ['key', 'metal', 'label', 'note', 'unit', 'quantity', 'buy', 'sell', 'sort_order', 'is_active', 'updated_by'];
+    public const PRICING = [
+        'manual' => 'Manual',
+        'auto' => 'Auto',
+    ];
+
+    /** The spot instrument each metal is priced from. */
+    public const INSTRUMENT = ['gold' => 'XAU', 'silver' => 'XAG'];
+
+    protected $attributes = ['pricing' => 'manual', 'buy_margin' => 0, 'sell_margin' => 0];
+
+    protected $fillable = ['key', 'metal', 'label', 'note', 'unit', 'quantity', 'pricing', 'buy_margin', 'sell_margin', 'buy', 'sell', 'sort_order', 'is_active', 'updated_by'];
 
     protected $casts = [
         'buy' => 'decimal:2',
         'sell' => 'decimal:2',
         'quantity' => 'decimal:3',
+        'buy_margin' => 'float',
+        'sell_margin' => 'float',
         'is_active' => 'boolean',
     ];
 
@@ -59,6 +75,27 @@ class MetalRate extends Model
     public function latestChange(): HasOne
     {
         return $this->hasOne(MetalRateChange::class)->latestOfMany();
+    }
+
+    public function isAuto(): bool
+    {
+        return $this->pricing === 'auto';
+    }
+
+    /** The item's weight in grams: "10 Tola" → 116.638. */
+    public function grams(): float
+    {
+        return self::gramsFor($this->unit, (float) $this->quantity);
+    }
+
+    public static function gramsFor(string $unit, float $quantity): float
+    {
+        return $quantity * match ($unit) {
+            'gram' => 1.0,
+            'kg' => 1000.0,
+            'oz' => (float) config('rates.grams_per_troy_ounce'),
+            default => (float) config('rates.grams_per_tola'),
+        };
     }
 
     /** "Silver — 10 Tola (QR Packaging)" */

@@ -32,6 +32,6 @@ Artisan::command('rates:prune', function (SpotRates $spot) {
     $this->info($spot->prune().' old spot readings deleted.');
 })->purpose('Delete spot-rate history older than config rates.keep_history_days');
 
-$every = max(1, min(60, (int) config('rates.fetch_every_minutes', 5)));
+$every = max(1, min(60, (int) config('rates.fetch_every_minutes', 1)));
 Schedule::command('rates:fetch')->cron("*/{$every} * * * *")->withoutOverlapping(10);
 Schedule::command('rates:prune')->dailyAt('03:30');
