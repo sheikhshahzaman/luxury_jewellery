@@ -11,10 +11,12 @@ use Illuminate\Support\Facades\Cache;
  * built from two separate sources:
  *  - spot: international spot prices (SpotRates — fetched on a schedule or
  *    entered by hand in Admin), with per-gram / per-tola rupee conversions;
- *  - prices: the store's own buy/sell prices, set only in Admin (MetalRate).
+ *  - prices: the store's own buy/sell prices (MetalRate). Manual items are
+ *    exactly what the admin typed; auto items are spot × weight × dollar rate
+ *    plus the item's margin, so they move with every spot reading.
  *
- * The numbers are the current database values. Browsers may shuffle them
- * slightly on screen (see display()); the values served here never change.
+ * Browsers may shuffle the numbers slightly on screen (see display()); the
+ * values served here are always the real ones.
  */
 class LiveRates
 {
@@ -24,11 +26,15 @@ class LiveRates
     {
     }
 
-    /** Admin prices as plain arrays, cached for a minute and cleared whenever the admin saves. */
+    /**
+     * The price board as plain arrays. The admin's rows are cached for a minute
+     * (cleared whenever the admin saves); auto items are then priced from the
+     * current spot values, so they change as soon as a new reading is saved.
+     */
     public function prices(): Collection
     {
         // Cached as a plain array: the cache store refuses to unserialize objects.
-        return collect(Cache::remember(self::CACHE_KEY, 60, fn () => MetalRate::active()->ordered()->with('latestChange')->get()
+        $rows = Cache::remember(self::CACHE_KEY, 60, fn () => MetalRate::active()->ordered()->with('latestChange')->get()
             ->map(fn (MetalRate $r) => [
                 'key' => $r->key,
                 'label' => $r->displayLabel(),
@@ -44,7 +50,60 @@ class LiveRates
                 'change' => $r->latestChange && $r->latestChange->buy_before !== null
                     ? (float) $r->latestChange->buy - (float) $r->latestChange->buy_before : 0.0,
                 'updated_at' => $r->updated_at?->toIso8601String(),
-            ])->all()));
+                // Used below for auto items, never sent to the browser.
+                '_auto' => $r->isAuto(),
+                '_grams' => $r->grams(),
+                '_margins' => [(float) $r->buy_margin, (float) $r->sell_margin],
+            ])->all());
+
+        $spot = $this->spot->current();
+
+        return collect($rows)->map(function (array $row) use ($spot) {
+            $auto = $row['_auto'] ? $this->autoPrice($row['metal'], $row['_grams'], $row['_margins'][0], $row['_margins'][1], $spot) : null;
+            if ($auto) {
+                $row = array_merge($row, $auto);
+            }
+            $row['auto'] = (bool) $auto;
+            unset($row['_auto'], $row['_grams'], $row['_margins']);
+
+            return $row;
+        });
+    }
+
+    /**
+     * Buy and sell in rupees for an item priced from spot, or null when the
+     * spot price or the dollar rate is missing (the saved price is shown then).
+     *
+     *   price = spot USD/oz ÷ 31.1035 × grams × rupees per dollar × (1 + margin%)
+     *
+     * Spot is the quoted price shown on the page (the bid), for buy and sell
+     * alike; the difference between the buy and sell margins is the spread.
+     *
+     * @param  array<string, array|null>|null  $spot  SpotRates::current(), fetched if not given
+     * @return array{buy: float, sell: float, change: float, updated_at: string}|null
+     */
+    public function autoPrice(string $metal, float $grams, float $buyMargin, float $sellMargin, ?array $spot = null): ?array
+    {
+        $spot ??= $this->spot->current();
+        $s = $spot[MetalRate::INSTRUMENT[$metal] ?? ''] ?? null;
+        $fx = $spot['USDPKR'] ?? null;
+        if (! $s || ! $fx || $grams <= 0) {
+            return null;
+        }
+
+        $ounces = $grams / config('rates.grams_per_troy_ounce');
+        $atSpot = $s['bid'] * $ounces * $fx['mid'];
+        $buy = round($atSpot * (1 + $buyMargin / 100));
+        $sell = round($atSpot * (1 + $sellMargin / 100));
+        // The same move, in rupees, that spot made over the last day.
+        $before = $s['mid'] - $s['change'];
+
+        return [
+            'buy' => $buy,
+            'sell' => $sell,
+            'change' => $before > 0 ? round($buy - $buy * $before / $s['mid']) : 0.0,
+            'updated_at' => $s['updated_at'],
+        ];
     }
 
     public static function forget(): void
@@ -70,12 +129,14 @@ class LiveRates
             if (! $s) {
                 return null;
             }
-            $perGram = $s['mid'] / config('rates.grams_per_troy_ounce');
+            // The quoted spot price is the bid, as on Kitco and TradingView;
+            // the rupee figures beside it use the same number.
+            $perGram = $s['bid'] / config('rates.grams_per_troy_ounce');
 
             return [
                 'bid_usd_oz' => $s['bid'],
                 'ask_usd_oz' => $s['ask'],
-                'price' => round($s['mid'], 2),
+                'price' => round($s['bid'], 2),
                 'change' => round($s['change'], 2),
                 'change_pct' => $s['change_pct'],
                 'history' => $s['history'],

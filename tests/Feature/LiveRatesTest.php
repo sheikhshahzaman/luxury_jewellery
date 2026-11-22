@@ -26,7 +26,7 @@ class LiveRatesTest extends TestCase
         Setting::flushCache();
         Cache::flush();
         DatabaseSeeder::seedMetalRates();
-        config(['rates.retry_backoff_ms' => [0], 'rates.provider' => 'gold_api', 'rates.fx_provider' => 'open_er_api']);
+        config(['rates.retry_backoff_ms' => [0], 'rates.providers' => ['gold_api'], 'rates.fx_provider' => 'open_er_api']);
     }
 
     /** What the fake provider answers; tests swap it mid-way. Null means "nothing faked yet". */
@@ -62,6 +62,7 @@ class LiveRatesTest extends TestCase
             'metal' => $r->metal, 'label' => $r->label, 'note' => $r->note, 'unit' => $r->unit,
             'quantity' => (float) $r->quantity, 'buy' => (float) $r->buy, 'sell' => (float) $r->sell,
             'sort_order' => $r->sort_order, 'is_active' => 1,
+            'pricing' => $r->pricing ?? 'manual', 'buy_margin' => (float) $r->buy_margin, 'sell_margin' => (float) $r->sell_margin,
         ], $overrides[$r->key] ?? [])])->all(),
             'rates_shuffle' => '1', 'rates_shuffle_pkr_min' => '10', 'rates_shuffle_pkr_max' => '20', 'rates_shuffle_seconds' => '3',
         ];
@@ -144,6 +145,195 @@ class LiveRatesTest extends TestCase
         $this->assertSame($before, MetalRate::orderBy('id')->get(['key', 'buy', 'sell', 'updated_at'])->toArray());
         $this->assertSame(0, MetalRateChange::count());
         $this->assertSame(5000.0, SpotRate::for('XAU')->newest()->first()->bid);
+    }
+
+    public function test_auto_priced_item_follows_spot_and_the_dollar_rate(): void
+    {
+        MetalRate::where('key', 'gold_1_tola')->update(['pricing' => 'auto', 'buy_margin' => 2, 'sell_margin' => 1]);
+        $this->fakeProvider(gold: 4000, silver: 50, pkr: 280);
+        app(SpotRates::class)->fetch();
+
+        $prices = collect($this->getJson('/rates/live')->json('prices'))->keyBy('key');
+        $tola = 4000 / 31.1035 * 11.6638 * 280;
+        $this->assertEquals(round($tola * 1.02), $prices['gold_1_tola']['buy']);
+        $this->assertEquals(round($tola * 1.01), $prices['gold_1_tola']['sell']);
+        $this->assertTrue($prices['gold_1_tola']['auto']);
+        $this->assertSame($this->getJson('/rates/live')->json('spot.gold.updated_at'), $prices['gold_1_tola']['updated_at']);
+        $this->assertArrayNotHasKey('buy_margin', $prices['gold_1_tola']); // margins stay private
+
+        // Manual items keep exactly what the admin typed.
+        $this->assertEquals(376389, $prices['gold_10_gram']['buy']);
+        $this->assertFalse($prices['gold_10_gram']['auto']);
+
+        // The market moves: the next fetch moves the price, on the page, the feed and the ticker.
+        $this->travel(5)->minutes();
+        $this->fakeProvider(gold: 3500, silver: 50, pkr: 280);
+        app(SpotRates::class)->fetch();
+        $expected = round(3500 / 31.1035 * 11.6638 * 280 * 1.02);
+        $row = collect($this->getJson('/rates/live')->json('prices'))->firstWhere('key', 'gold_1_tola');
+        $this->assertEquals($expected, $row['buy']);
+        $this->assertLessThan(0, $row['change']);
+        $this->get('/rates')->assertSee('Rs '.number_format($expected));
+        $this->get('/')->assertSee('Rs '.number_format($expected));
+    }
+
+    public function test_auto_priced_item_uses_grams_for_every_unit(): void
+    {
+        MetalRate::where('metal', 'silver')->update(['pricing' => 'auto', 'buy_margin' => 0, 'sell_margin' => 0]);
+        $this->fakeProvider(gold: 4000, silver: 50, pkr: 280);
+        app(SpotRates::class)->fetch();
+
+        $prices = collect($this->getJson('/rates/live')->json('prices'))->keyBy('key');
+        $gram = 50 / 31.1035 * 280;
+        $this->assertEquals(round($gram * 1000), $prices['silver_1_kg']['buy']);
+        $this->assertEquals(round($gram * 5 * 11.6638), $prices['silver_5_tola_bar']['sell']);
+    }
+
+    public function test_auto_priced_item_shows_the_saved_price_until_spot_and_dollar_rate_exist(): void
+    {
+        MetalRate::where('key', 'gold_1_tola')->update(['pricing' => 'auto', 'buy_margin' => 2, 'sell_margin' => 1]);
+
+        $row = collect($this->getJson('/rates/live')->json('prices'))->firstWhere('key', 'gold_1_tola');
+        $this->assertEquals(438993, $row['buy']);
+        $this->assertEquals(434990, $row['sell']);
+    }
+
+    public function test_admin_switches_an_item_to_auto_with_margins(): void
+    {
+        $this->fakeProvider(gold: 4000, silver: 50, pkr: 280);
+        app(SpotRates::class)->fetch();
+        $admin = $this->admin();
+
+        $this->actingAs($admin)->post('/admin/rates', $this->pricesForm([
+            'gold_1_tola' => ['pricing' => 'auto', 'buy_margin' => 2.5, 'sell_margin' => 1.25],
+        ]))->assertSessionHas('success');
+
+        $rate = MetalRate::where('key', 'gold_1_tola')->first();
+        $this->assertSame('auto', $rate->pricing);
+        $this->assertEquals(2.5, $rate->buy_margin);
+        $expected = round(4000 / 31.1035 * 11.6638 * 280 * 1.025);
+        $this->assertEquals($expected, collect($this->getJson('/rates/live')->json('prices'))->firstWhere('key', 'gold_1_tola')['buy']);
+        // The switch is in the audit trail with the price it gave; other rows are not.
+        $this->assertSame(1, MetalRateChange::count());
+        $this->assertEquals($expected, MetalRateChange::first()->buy);
+
+        // Saving again without changes records nothing, even after the market has moved.
+        $this->fakeProvider(gold: 3900, silver: 50, pkr: 280);
+        app(SpotRates::class)->fetch();
+        $this->post('/admin/rates', $this->pricesForm())->assertSessionHas('success');
+        $this->assertSame(1, MetalRateChange::count());
+
+        $this->get('/admin/rates')->assertOk()->assertSee('% over spot');
+
+        // Margins outside a sensible range are refused; sell above buy is refused.
+        $this->post('/admin/rates', $this->pricesForm(['gold_1_tola' => ['pricing' => 'auto', 'buy_margin' => 900, 'sell_margin' => 1]]))
+            ->assertSessionHasErrors();
+        $this->post('/admin/rates', $this->pricesForm(['gold_1_tola' => ['pricing' => 'auto', 'buy_margin' => 1, 'sell_margin' => 3]]))
+            ->assertSessionHasErrors();
+
+        // Back to manual: the typed price shows again.
+        $this->post('/admin/rates', $this->pricesForm(['gold_1_tola' => ['pricing' => 'manual', 'buy' => 400000, 'sell' => 395000]]))
+            ->assertSessionHas('success');
+        $this->assertEquals(400000, collect($this->getJson('/rates/live')->json('prices'))->firstWhere('key', 'gold_1_tola')['buy']);
+    }
+
+    /** A Kitco quote line: symbol, currency, unit, time (New York), bid, mid, ask, change, change %, low, high. */
+    protected function kitco(string $symbol, float $bid, float $ask, string $time = '2026-11-20 17:00:00'): string
+    {
+        return implode(',', [$symbol, 'USD', 'OUNCE', $time, $bid, round(($bid + $ask) / 2, 2), $ask, -86.3, -2.38, 3502, 3652.2])."\n";
+    }
+
+    public function test_spot_comes_from_kitco_and_shows_the_bid_like_kitco_does(): void
+    {
+        $this->travelTo('2026-11-22 15:30:00');
+        SpotRate::query()->delete();
+        config(['rates.providers' => ['kitco', 'gold_api']]);
+        $this->provider(fn ($request) => match (true) {
+            str_contains($request->url(), 'kitco') && str_contains($request->url(), 'symbol=AU') => Http::response($this->kitco('AU', 3537.90, 3539.90)),
+            str_contains($request->url(), 'kitco') && str_contains($request->url(), 'symbol=AG') => Http::response($this->kitco('AG', 41.12, 41.37)),
+            str_contains($request->url(), 'gold-api') => Http::response(['price' => 3539.0]),
+            default => Http::response(['result' => 'success', 'rates' => ['PKR' => 280]]),
+        });
+
+        app(SpotRates::class)->fetch();
+
+        $gold = $this->getJson('/rates/live')->json('spot.gold');
+        $this->assertEquals(3537.90, $gold['bid_usd_oz']);
+        $this->assertEquals(3539.90, $gold['ask_usd_oz']);
+        // The headline spot price is the bid, as quoted by Kitco and TradingView.
+        $this->assertEquals(3537.90, $gold['price']);
+        $this->assertSame('kitco.com', $gold['source']);
+        // Rupee figures on the spot card use the same price as the headline.
+        $this->assertEquals(round(3537.90 / 31.1035 * 11.6638 * 280), $gold['pkr_per_tola']);
+        $this->get('/rates')->assertSee('$3,537.90');
+        $this->assertEquals(41.12, $this->getJson('/rates/live')->json('spot.silver.price'));
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'gold-api'));
+    }
+
+    public function test_gold_board_matches_the_sarafa_rate_at_todays_spot(): void
+    {
+        // 22 Nov 2026: Kitco bid $3,537.90, Rs 276.595853 per dollar, Karachi Sarafa 24K Rs 385,000 / 384,000 per tola.
+        $this->travelTo('2026-11-22 15:30:00');
+        SpotRate::query()->delete();
+        config(['rates.providers' => ['kitco']]);
+        $this->provider(fn ($request) => match (true) {
+            str_contains($request->url(), 'symbol=AU') => Http::response($this->kitco('AU', 3537.90, 3539.90)),
+            str_contains($request->url(), 'symbol=AG') => Http::response($this->kitco('AG', 41.12, 41.37)),
+            default => Http::response(['result' => 'success', 'rates' => ['PKR' => 276.595853]]),
+        });
+        app(SpotRates::class)->fetch();
+        MetalRate::where('metal', 'gold')->update(['pricing' => 'auto', 'buy_margin' => 4.915, 'sell_margin' => 4.643]);
+
+        $prices = collect($this->getJson('/rates/live')->json('prices'))->keyBy('key');
+        // Both sides are priced from the quoted spot (the bid); the margins make the spread.
+        $this->assertEqualsWithDelta(385000, $prices['gold_1_tola']['buy'], 10);
+        $this->assertEqualsWithDelta(384000, $prices['gold_1_tola']['sell'], 10);
+        // Sarafa's 10 gram rate is the tola rate by weight: Rs 329,220.
+        $this->assertEqualsWithDelta(329220, $prices['gold_10_gram']['sell'], 10);
+    }
+
+    public function test_spot_falls_back_to_the_next_provider_when_kitco_fails(): void
+    {
+        $this->travelTo('2026-11-22 15:30:00');
+        SpotRate::query()->delete();
+        config(['rates.providers' => ['kitco', 'gold_api']]);
+        $broken = [
+            fn () => Http::response('down', 503),
+            fn () => Http::response(''),
+            fn () => Http::response("<html>blocked</html>"),
+            fn () => Http::response($this->kitco('AU', 0, 0)),
+            fn () => Http::response($this->kitco('AU', 3539.90, 3537.90)),          // ask below bid
+            fn () => Http::response($this->kitco('AU', 3537.90, 3539.90, '2026-11-10 17:00:00')), // stale
+            fn () => Http::response($this->kitco('AG', 41.12, 41.37)),              // wrong metal
+        ];
+        foreach ($broken as $i => $answer) {
+            $this->travel(5)->minutes();
+            $this->provider(fn ($request) => match (true) {
+                str_contains($request->url(), 'kitco') => $answer(),
+                str_ends_with($request->url(), '/XAU') => Http::response(['price' => 3539.0 + $i]),
+                str_ends_with($request->url(), '/XAG') => Http::response(['price' => 41.08]),
+                default => Http::response(['result' => 'success', 'rates' => ['PKR' => 280]]),
+            });
+
+            $result = app(SpotRates::class)->fetch();
+
+            $this->assertArrayHasKey('XAU', $result['saved'], "case $i");
+            $gold = $this->getJson('/rates/live')->json('spot.gold');
+            $this->assertEquals(3539.0 + $i, $gold['price'], "case $i");
+            $this->assertSame('gold-api.com', $gold['source'], "case $i");
+        }
+    }
+
+    public function test_spot_keeps_the_last_value_only_when_every_provider_fails(): void
+    {
+        config(['rates.providers' => ['kitco', 'gold_api']]);
+        $this->provider(fn () => Http::response('down', 503));
+
+        $result = app(SpotRates::class)->fetch();
+
+        $this->assertArrayNotHasKey('XAU', $result['saved']);
+        $this->assertStringContainsString('kitco', $result['failed']['XAU']);
+        $this->assertStringContainsString('gold-api', $result['failed']['XAU']);
     }
 
     public function test_provider_failure_keeps_the_last_good_values_and_time(): void

@@ -7,10 +7,21 @@
 */
 return [
 
-    // Gold & silver spot, USD per troy ounce:
-    //   gold_api    api.gold-api.com — free, no key, one price (bid = ask)
+    // Gold & silver spot, USD per troy ounce, tried in this order until one
+    // gives a valid reading (so one provider being down doesn't freeze the page):
+    //   kitco       Kitco's quote feed — free, no key, bid/ask; the bid is the
+    //               spot price quoted by Kitco, TradingView and most news sites
+    //   gold_api    api.gold-api.com — free, no key, one price (bid = ask); rounded
+    //               to whole dollars and off the market at times, so only a backup
     //   goldapi_io  www.goldapi.io   — needs GOLDAPI_IO_KEY, real bid/ask
-    'provider' => env('RATES_PROVIDER', 'gold_api'),
+    // RATES_PROVIDERS sets the whole list ("kitco,gold_api"); an older
+    // RATES_PROVIDER value is kept as the backup behind Kitco.
+    'providers' => array_values(array_unique(array_filter(array_map('trim',
+        explode(',', (string) env('RATES_PROVIDERS', 'kitco,'.env('RATES_PROVIDER', 'gold_api'))))))),
+
+    // A Kitco quote older than this (days) is treated as stale. Covers
+    // weekends and holidays, when the market is shut and the last price stands.
+    'max_quote_age_days' => 5,
 
     'goldapi_io_key' => env('GOLDAPI_IO_KEY'),
 

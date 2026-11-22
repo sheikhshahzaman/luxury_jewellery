@@ -44,12 +44,36 @@ class SpotRates
         $failed = [];
         $now = now();
 
-        $readings = [];
-        try {
-            $readings += $this->fetchMetals();
-        } catch (Throwable $e) {
-            $failed['XAU'] = $failed['XAG'] = $e->getMessage();
+        // Metals: each provider in turn, until one gives a reading that passes validation.
+        foreach (['XAU', 'XAG'] as $instrument) {
+            $problems = [];
+            foreach ((array) config('rates.providers') as $provider) {
+                try {
+                    [$bid, $ask, $source] = $this->fetchMetal($provider, $instrument);
+                } catch (Throwable $e) {
+                    $problems[] = $e->getMessage();
+
+                    continue;
+                }
+                if ($problem = $this->invalid($instrument, $bid, $ask)) {
+                    $problems[] = "$source: $problem";
+
+                    continue;
+                }
+                SpotRate::create(['instrument' => $instrument, 'bid' => $bid, 'ask' => $ask, 'source' => $source, 'fetched_at' => $now]);
+                $saved[$instrument] = ($bid + $ask) / 2;
+                $problems = [];
+
+                break;
+            }
+            if ($problems) {
+                $failed[$instrument] = implode('; ', $problems);
+            } elseif (! isset($saved[$instrument])) {
+                $failed[$instrument] = 'no spot provider configured (config/rates.php)';
+            }
         }
+
+        $readings = [];
         if (config('rates.fx_provider') !== 'none') {
             try {
                 $readings += $this->fetchUsdPkr();
@@ -171,20 +195,40 @@ class SpotRates
     // Providers
     // ---------------------------------------------------------------------
 
-    /** @return array<string, array{0: float, 1: float, 2: string}> */
-    protected function fetchMetals(): array
+    /** @return array{0: float, 1: float, 2: string} bid, ask, source */
+    protected function fetchMetal(string $provider, string $symbol): array
     {
-        return match ($provider = config('rates.provider')) {
-            'gold_api' => [
-                'XAU' => $this->goldApi('XAU'),
-                'XAG' => $this->goldApi('XAG'),
-            ],
-            'goldapi_io' => [
-                'XAU' => $this->goldApiIo('XAU'),
-                'XAG' => $this->goldApiIo('XAG'),
-            ],
+        return match ($provider) {
+            'kitco' => $this->kitco($symbol),
+            'gold_api' => $this->goldApi($symbol),
+            'goldapi_io' => $this->goldApiIo($symbol),
             default => throw new RuntimeException("Unknown spot provider \"$provider\" (config/rates.php)."),
         };
+    }
+
+    /**
+     * Kitco's quote feed, one CSV line:
+     *   AU,USD,OUNCE,2026-11-20 17:00:00,3537.90,3538.90,3539.90,-86.30,-2.38,3502.00,3652.20
+     *   symbol, currency, unit, time (New York), bid, mid, ask, change, change %, low, high
+     */
+    protected function kitco(string $symbol): array
+    {
+        $code = ['XAU' => 'AU', 'XAG' => 'AG'][$symbol] ?? throw new RuntimeException("kitco.com has no $symbol");
+        $line = trim($this->getText("https://proxy.kitco.com/getPM?symbol={$code}&currency=USD"));
+        $f = str_getcsv(strtok($line, "\n"), ',', '"', '');
+        if (count($f) < 7 || $f[0] !== $code || $f[1] !== 'USD' || ! is_numeric($f[4]) || ! is_numeric($f[6])) {
+            throw new RuntimeException('kitco.com returned no price');
+        }
+        try {
+            $at = Carbon::parse($f[3], 'America/New_York');
+        } catch (Throwable) {
+            throw new RuntimeException('kitco.com returned no time');
+        }
+        if ($at->lt(now()->subDays((int) config('rates.max_quote_age_days', 5)))) {
+            throw new RuntimeException('kitco.com price is stale');
+        }
+
+        return [(float) $f[4], (float) $f[6], 'kitco.com'];
     }
 
     /** api.gold-api.com: a single price, used as both bid and ask. */
@@ -233,8 +277,18 @@ class SpotRates
     /** GET JSON with a timeout and retries with backoff. */
     protected function get(string $url, array $headers = []): array
     {
-        $response = Http::acceptJson()
-            ->withUserAgent('LaxJewellers-rates/1.0')
+        return (array) $this->request($url, $headers + ['Accept' => 'application/json'])->json();
+    }
+
+    /** GET plain text with a timeout and retries with backoff. */
+    protected function getText(string $url): string
+    {
+        return $this->request($url, ['Accept' => 'text/plain'])->body();
+    }
+
+    protected function request(string $url, array $headers): \Illuminate\Http\Client\Response
+    {
+        $response = Http::withUserAgent('LaxJewellers-rates/1.0')
             ->withHeaders($headers)
             ->timeout((int) config('rates.timeout', 8))
             ->retry(config('rates.retry_backoff_ms', [500, 1500, 4000]), 0, null, false)
@@ -244,7 +298,7 @@ class SpotRates
             throw new RuntimeException(parse_url($url, PHP_URL_HOST)." answered HTTP {$response->status()}");
         }
 
-        return (array) $response->json();
+        return $response;
     }
 
     /** Why a reading can't be saved, or null if it's fine. */
