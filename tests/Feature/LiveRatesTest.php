@@ -336,6 +336,48 @@ class LiveRatesTest extends TestCase
         $this->assertStringContainsString('gold-api', $result['failed']['XAU']);
     }
 
+    public function test_spot_is_fetched_every_minute_and_the_dollar_rate_hourly(): void
+    {
+        $this->assertSame(1, config('rates.fetch_every_minutes'));
+        $event = collect(app(\Illuminate\Console\Scheduling\Schedule::class)->events())
+            ->first(fn ($e) => str_contains($e->command, 'rates:fetch'));
+        $this->assertSame('* * * * *', preg_replace('#^\*/1 #', '* ', $event->expression));
+        $this->get('/rates')->assertSee('updated every minute')->assertDontSee('every 1 minutes');
+
+        $fx = 0;
+        $this->provider(function ($request) use (&$fx) {
+            if (str_contains($request->url(), 'er-api')) {
+                $fx++;
+
+                return Http::response(['result' => 'success', 'rates' => ['PKR' => 276.6]]);
+            }
+
+            return Http::response(['price' => str_ends_with($request->url(), '/XAU') ? 3537.9 : 41.12]);
+        });
+        $spot = app(SpotRates::class);
+
+        $spot->fetch();
+        $this->assertSame(1, $fx);
+        // Gold and silver every minute; the dollar rate (which changes once a day) is not asked again for an hour.
+        foreach (range(1, 59) as $minute) {
+            $this->travel(1)->minutes();
+            $result = $spot->fetch();
+            $this->assertArrayHasKey('XAU', $result['saved']);
+            $this->assertArrayNotHasKey('USDPKR', $result['failed']);
+        }
+        $this->assertSame(1, $fx);
+        $this->assertSame(60, SpotRate::for('XAU')->where('source', 'gold-api.com')->count());
+        $this->assertNotNull($this->getJson('/rates/live')->json('spot.usd_pkr'));
+
+        $this->travel(2)->minutes();
+        $spot->fetch();
+        $this->assertSame(2, $fx);
+
+        // "Fetch now" in Admin always asks for the dollar rate too.
+        $this->actingAs($this->admin())->post('/admin/rates/fetch')->assertSessionHas('success');
+        $this->assertSame(3, $fx);
+    }
+
     public function test_provider_failure_keeps_the_last_good_values_and_time(): void
     {
         $this->fakeProvider();

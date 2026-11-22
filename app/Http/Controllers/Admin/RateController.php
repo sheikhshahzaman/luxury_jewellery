@@ -200,7 +200,7 @@ class RateController extends Controller
 
         return back()->with('success', $manual
             ? 'Manual spot rates saved and shown on the website. Automatic fetching is paused.'
-            : 'Spot rates are automatic again — they update every '.config('rates.fetch_every_minutes').' minutes.');
+            : 'Spot rates are automatic again — they update '.rates_every().'.');
     }
 
     /** Fetch spot rates right now (server-side). Automatic mode only, so typed values aren't overtaken. */
@@ -210,7 +210,7 @@ class RateController extends Controller
             return back()->with('error', 'Spot rates are on manual. Switch to automatic to fetch from the provider.');
         }
 
-        ['saved' => $saved, 'failed' => $failed] = $spot->fetch();
+        ['saved' => $saved, 'failed' => $failed] = $spot->fetch(freshFx: true);
 
         if (! $saved) {
             return back()->with('error', 'Could not fetch spot rates; the last good values are still shown. '.collect($failed)->map(fn ($m, $i) => "$i: $m")->implode('; '));

@@ -34,11 +34,13 @@ class SpotRates
     }
 
     /**
-     * Fetch from the providers and save what's valid.
+     * Fetch from the providers and save what's valid. The dollar rate is only
+     * asked for when the saved one is older than rates.fx_every_minutes
+     * (or always, with $freshFx).
      *
      * @return array{saved: array<string, float>, failed: array<string, string>}
      */
-    public function fetch(): array
+    public function fetch(bool $freshFx = false): array
     {
         $saved = [];
         $failed = [];
@@ -74,7 +76,10 @@ class SpotRates
         }
 
         $readings = [];
-        if (config('rates.fx_provider') !== 'none') {
+        $lastFx = SpotRate::for('USDPKR')->where('source', '!=', 'manual')->max('fetched_at');
+        $fxDue = $freshFx || ! $lastFx
+            || Carbon::parse($lastFx)->lte($now->copy()->subMinutes(max(1, (int) config('rates.fx_every_minutes', 60)) - 1)->subSeconds(30));
+        if ($fxDue && config('rates.fx_provider') !== 'none') {
             try {
                 $readings += $this->fetchUsdPkr();
             } catch (Throwable $e) {

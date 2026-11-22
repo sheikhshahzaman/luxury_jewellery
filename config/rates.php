@@ -28,15 +28,21 @@ return [
     // USD → PKR for rupee conversions: open_er_api (free, no key, updates daily) or "none".
     'fx_provider' => env('RATES_FX_PROVIDER', 'open_er_api'),
 
-    // How often the scheduler fetches, in minutes (1–60).
-    'fetch_every_minutes' => (int) env('RATES_FETCH_EVERY', 5),
+    // How often the scheduler fetches gold and silver, in minutes (1–60).
+    'fetch_every_minutes' => (int) env('RATES_FETCH_EVERY', 1),
+
+    // The dollar rate changes about once a day and its free provider limits
+    // frequent callers, so it is asked for at most this often (minutes).
+    'fx_every_minutes' => (int) env('RATES_FX_EVERY', 60),
 
     // Per request: seconds before giving up, and waits (ms) between retries.
     'timeout' => 8,
     'retry_backoff_ms' => [500, 1500, 4000],
 
-    // Spot history older than this is deleted daily (0 keeps everything).
-    'keep_history_days' => (int) env('RATES_KEEP_DAYS', 180),
+    // Spot history older than this is deleted daily (0 keeps everything). The
+    // site only uses the last day (sparkline, 24h change); a reading a minute
+    // makes ~2,900 rows a day, so a month keeps the database small.
+    'keep_history_days' => (int) env('RATES_KEEP_DAYS', 30),
 
     // How often open pages ask the server for fresh numbers, in seconds.
     'poll_seconds' => 30,

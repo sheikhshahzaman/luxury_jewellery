@@ -29,7 +29,7 @@
         <div class="spot-mode" role="radiogroup" aria-label="Where spot rates come from">
             <label class="mode-opt">
                 <input type="radio" name="spot_mode" value="auto" @checked(old('spot_mode', $mode) === 'auto')>
-                <span><b>Automatic</b> Fetched from {{ $provider }} every {{ config('rates.fetch_every_minutes') }} minutes</span>
+                <span><b>Automatic</b> Fetched from {{ $provider }} {{ rates_every() }}</span>
             </label>
             <label class="mode-opt">
                 <input type="radio" name="spot_mode" value="manual" @checked(old('spot_mode', $mode) === 'manual')>
